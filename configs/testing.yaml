@@ -1,0 +1,67 @@
+# Testing environment configuration
+version: "0.1.0"
+environment: "testing"
+
+# Testing PDF processing settings
+pdf_processing:
+  chunk_size: 500  # Very small chunks for fast testing
+  chunk_overlap: 100
+  cache_enabled: false  # Disable cache for consistent testing
+  max_pages: 5  # Very limited pages for fast tests
+
+# Mock API configurations for testing
+api_configs:
+  openai:
+    provider: "openai"
+    model: "gpt-3.5-turbo"
+    max_retries: 1  # Single retry for fast tests
+    timeout: 10  # Short timeout for tests
+    rate_limit: 10
+
+  fireworks:
+    provider: "fireworks"
+    model: "llama-v2-7b-chat"
+    max_retries: 1
+    timeout: 10
+
+# Minimal evaluation methods for testing
+evaluation_methods:
+  - method: "vectara_hhem"
+    enabled: true
+    confidence_threshold: 0.3  # Lower threshold for testing
+    batch_size: 2  # Very small batches
+    config: {}
+
+# Minimal prompt generation for testing
+prompt_generation:
+  strategies: ["template"]  # Only template-based for speed
+  max_prompts_per_document: 5  # Very few prompts
+  hallucination_types: ["factual"]  # Single type for testing
+  perturbation_enabled: false  # Disable for consistent testing
+
+# Testing output settings
+output:
+  format: "jsonl"
+  output_dir: "data/test_evaluations"
+  filename_prefix: "test_dod_halueval"
+  include_metadata: false  # Minimal output for testing
+  compress: false
+
+# No caching for testing
+cache:
+  enabled: false
+
+# Verbose logging for testing
+logging:
+  level: "DEBUG"
+  log_file: null  # No file logging during tests
+  console_output: false  # No console output during tests
+  structured_logging: false
+
+# Minimal processing settings for testing
+batch_size: 2
+max_concurrent_requests: 1  # Single request for deterministic testing
+
+# Testing data paths
+source_documents_dir: "tests/fixtures/documents"
+processed_documents_dir: "data/test_processed"

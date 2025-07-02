@@ -1,0 +1,101 @@
+# Default configuration for DoDHaluEval
+version: "0.1.0"
+environment: "development"
+
+# PDF Processing Configuration
+pdf_processing:
+  chunk_size: 1000
+  chunk_overlap: 200
+  cache_enabled: true
+  cache_dir: "/tmp/dodhalueval/pdf_cache"
+  max_pages: null
+
+# API Provider Configurations
+api_configs:
+  openai:
+    provider: "openai"
+    model: "gpt-4"
+    api_key: null  # Set via environment variable DODHALUEVAL_API_CONFIGS_OPENAI_API_KEY
+    max_retries: 3
+    timeout: 30
+    rate_limit: null
+    base_url: null
+  
+  fireworks:
+    provider: "fireworks"
+    model: "llama-v2-70b-chat"
+    api_key: null  # Set via environment variable DODHALUEVAL_API_CONFIGS_FIREWORKS_API_KEY
+    max_retries: 3
+    timeout: 30
+    rate_limit: null
+    base_url: null
+
+# Evaluation Method Configurations
+evaluation_methods:
+  - method: "vectara_hhem"
+    enabled: true
+    confidence_threshold: 0.5
+    batch_size: 10
+    config:
+      api_key: null  # Set via environment variable
+      customer_id: null
+  
+  - method: "g_eval"
+    enabled: true
+    confidence_threshold: 0.5
+    batch_size: 5
+    config:
+      llm_provider: "openai"
+      model: "gpt-4"
+  
+  - method: "self_check_gpt"
+    enabled: true
+    confidence_threshold: 0.5
+    batch_size: 5
+    config:
+      num_samples: 5
+      llm_provider: "openai"
+
+# Prompt Generation Configuration
+prompt_generation:
+  strategies: ["template", "llm_based"]
+  max_prompts_per_document: 100
+  hallucination_types: ["factual", "logical", "context"]
+  template_file: null
+  perturbation_enabled: true
+
+# Output Configuration
+output:
+  format: "jsonl"
+  output_dir: "data/evaluations"
+  filename_prefix: "dod_halueval"
+  include_metadata: true
+  compress: false
+
+# Cache Configuration
+cache:
+  enabled: true
+  pdf_cache_dir: "/tmp/dodhalueval/pdf_cache"
+  llm_cache_dir: "/tmp/dodhalueval/llm_cache"
+  max_cache_size_mb: 1000
+  ttl_hours: 24
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  log_file: null
+  log_dir: "logs"
+  max_file_size_mb: 10
+  backup_count: 5
+  console_output: true
+  structured_logging: true
+
+# Processing Settings
+batch_size: 50
+max_concurrent_requests: 10
+enable_progress_bar: true
+
+# Data Paths
+data_dir: "data"
+source_documents_dir: "data/CSC"
+processed_documents_dir: "data/processed"

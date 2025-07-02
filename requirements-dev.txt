@@ -1,0 +1,11 @@
+-r requirements.txt
+pytest>=7.0.0
+pytest-cov
+pytest-asyncio
+black
+flake8
+mypy
+isort
+pre-commit
+openai>=1.0.0
+transformers>=4.30.0

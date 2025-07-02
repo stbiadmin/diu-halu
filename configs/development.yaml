@@ -1,0 +1,74 @@
+# Development environment configuration
+version: "0.1.0"
+environment: "development"
+
+# Development-specific PDF processing settings
+pdf_processing:
+  chunk_size: 800  # Smaller chunks for faster processing during development
+  chunk_overlap: 150
+  cache_enabled: true
+  max_pages: 10  # Limit pages for faster testing
+
+# API configurations for development
+api_configs:
+  openai:
+    provider: "openai"
+    model: "gpt-3.5-turbo"  # Use cheaper model for development
+    max_retries: 2
+    timeout: 20
+    rate_limit: 60  # Conservative rate limiting
+
+  fireworks:
+    provider: "fireworks"
+    model: "llama-v2-7b-chat"  # Use smaller model for development
+    max_retries: 2
+    timeout: 20
+
+# Enable only fast evaluation methods for development
+evaluation_methods:
+  - method: "vectara_hhem"
+    enabled: true
+    confidence_threshold: 0.5
+    batch_size: 5  # Smaller batches for development
+    config: {}
+  
+  - method: "g_eval"
+    enabled: false  # Disable slow methods in development
+    confidence_threshold: 0.5
+    batch_size: 3
+
+# Development prompt generation settings
+prompt_generation:
+  strategies: ["template"]  # Use only fast template-based generation
+  max_prompts_per_document: 20  # Fewer prompts for faster iteration
+  hallucination_types: ["factual", "logical"]
+  perturbation_enabled: true
+
+# Development output settings
+output:
+  format: "jsonl"
+  output_dir: "data/dev_evaluations"
+  filename_prefix: "dev_dod_halueval"
+  include_metadata: true
+  compress: false
+
+# Aggressive caching for development
+cache:
+  enabled: true
+  max_cache_size_mb: 500
+  ttl_hours: 72  # Keep cache longer in development
+
+# Verbose logging for development
+logging:
+  level: "DEBUG"
+  log_file: "logs/development.log"
+  console_output: true
+  structured_logging: true
+
+# Smaller batches for development
+batch_size: 10
+max_concurrent_requests: 3  # Lower concurrency for development
+
+# Development data paths
+source_documents_dir: "data/CSC"
+processed_documents_dir: "data/dev_processed"

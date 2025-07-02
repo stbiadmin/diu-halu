@@ -1,0 +1,75 @@
+# Example Pipeline Configuration for DoDHaluEval
+# This file demonstrates all available configuration options
+
+# Dataset configuration
+dataset:
+  path: "data/CSC"                    # Path to PDF documents
+  file_pattern: "*.pdf"               # File pattern to match
+  max_files: 2                        # Limit files for quick testing (null for all)
+  max_pages_per_file: 5               # Limit pages per file for faster processing
+
+# Prompt generation settings
+prompt_generation:
+  num_prompts: 20                      #  small test to validate fixes
+  methods:                            # Generation methods to use
+    - "llm"                          # LLM-based generation
+  llm_provider: "openai"             # Provider for LLM-based generation
+  strategies:                         # Hallucination types to generate
+    - "factual"
+    - "logical"
+    - "context"
+  perturbation_enabled: true          # Apply perturbation strategies
+  validation_enabled: true            # Validate generated prompts
+
+# Response generation settings
+response_generation:
+  providers:                          # LLM providers to use
+    - "openai"
+    - "fireworks"
+    # - "mock"                       # Uncomment for testing without API calls
+  models:                             # Specific models for each provider
+    openai: "gpt-4"
+    fireworks: "accounts/fireworks/models/llama-v3p1-70b-instruct"
+  hallucination_rate: 0.3            # Percentage of responses with injected hallucinations
+  max_concurrent: 5                   # Maximum concurrent API requests
+  timeout: 30                         # Request timeout in seconds
+
+# Hallucination detection settings
+hallucination_detection:
+  methods:                            # Detection methods to use
+    - "hhem"                         # HuggingFace HHEM
+    - "g_eval"                       # G-Eval with GPT-4
+    - "selfcheck"                    # SelfCheckGPT
+  ensemble: true                      # Use ensemble voting
+  max_concurrent: 2                   # Lower concurrency for evaluation
+  timeout: 60                         # Longer timeout for evaluation
+  providers:                          # Providers for each method
+    g_eval: "openai"
+    selfcheck: "openai"
+
+# Output settings
+output:
+  directory: "output/pipeline_results_calibrated"  # Output directory (calibrated fixes)
+  format: "halueval"                    # Output format (halueval)
+  save_intermediate: true               # Save intermediate results
+  generate_report: true                 # Generate summary report
+
+# Processing settings
+processing:
+  batch_size: 10                        # Batch size for processing
+  show_progress: true                   # Show progress bars
+  verbose: false                        # Verbose logging
+  bypass_cache: false                   # Global cache bypass (regenerate everything)
+  
+  # Granular cache control - bypass specific steps only
+  # Useful scenarios:
+  #   - Testing prompt generation improvements: set prompt_generation=true
+  #   - Testing response generation fixes: set response_generation=true  
+  #   - Testing evaluation improvements: set hallucination_detection=true
+  #   - After code changes to specific components
+  bypass_cache_steps:
+    pdf_extraction: false               # Re-extract text from PDFs (slow - usually keep false)
+    document_chunking: false            # Re-chunk documents into smaller pieces  
+    prompt_generation: true            # Keep improved prompts (already generated)
+    response_generation: true           # Re-generate responses (TEST: calibrated injection + cleaning)
+    hallucination_detection: true       # Re-run evaluations (TEST: enhanced hallucination detection)

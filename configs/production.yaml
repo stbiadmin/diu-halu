@@ -1,0 +1,87 @@
+# Production environment configuration
+version: "0.1.0"
+environment: "production"
+
+# Production PDF processing settings
+pdf_processing:
+  chunk_size: 1200  # Larger chunks for better context
+  chunk_overlap: 250
+  cache_enabled: true
+  max_pages: null  # Process all pages in production
+
+# Production API configurations
+api_configs:
+  openai:
+    provider: "openai"
+    model: "gpt-4"  # Use best model for production
+    max_retries: 5  # More retries for reliability
+    timeout: 60  # Longer timeout for production
+    rate_limit: 100
+
+  fireworks:
+    provider: "fireworks"
+    model: "llama-v2-70b-chat"  # Use best model for production
+    max_retries: 5
+    timeout: 60
+
+# Enable all evaluation methods for production
+evaluation_methods:
+  - method: "vectara_hhem"
+    enabled: true
+    confidence_threshold: 0.7  # Higher threshold for production
+    batch_size: 20
+    config: {}
+  
+  - method: "g_eval"
+    enabled: true
+    confidence_threshold: 0.7
+    batch_size: 10
+    config:
+      llm_provider: "openai"
+      model: "gpt-4"
+  
+  - method: "self_check_gpt"
+    enabled: true
+    confidence_threshold: 0.7
+    batch_size: 10
+    config:
+      num_samples: 10
+      llm_provider: "openai"
+
+# Production prompt generation settings
+prompt_generation:
+  strategies: ["template", "llm_based", "heuristic"]
+  max_prompts_per_document: 200  # More prompts for comprehensive evaluation
+  hallucination_types: ["factual", "logical", "context"]
+  perturbation_enabled: true
+
+# Production output settings
+output:
+  format: "jsonl"
+  output_dir: "data/production_evaluations"
+  filename_prefix: "prod_dod_halueval"
+  include_metadata: true
+  compress: true  # Compress output in production
+
+# Production cache settings
+cache:
+  enabled: true
+  max_cache_size_mb: 2000  # Larger cache for production
+  ttl_hours: 12  # Shorter TTL for fresher results
+
+# Production logging
+logging:
+  level: "INFO"
+  log_file: "logs/production.log"
+  console_output: false  # Disable console output in production
+  structured_logging: true
+  max_file_size_mb: 50  # Larger log files in production
+  backup_count: 10
+
+# Production processing settings
+batch_size: 100  # Larger batches for efficiency
+max_concurrent_requests: 20  # Higher concurrency for production
+
+# Production data paths
+source_documents_dir: "data/CSC"
+processed_documents_dir: "data/production_processed"
