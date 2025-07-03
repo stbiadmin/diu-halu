@@ -364,6 +364,8 @@ class DoDHaluEvalPipeline:
                 chunk = DocumentChunk(**chunk_data)
                 chunks.append(chunk)
             logger.info(f"Loaded {len(chunks)} chunks from cache")
+            # Store chunks for document store building
+            self._current_chunks = chunks
             return chunks
         return await self._process_documents()
     
@@ -520,21 +522,29 @@ class DoDHaluEvalPipeline:
             result = self.pdf_processor.process_document(str(pdf_file))
             chunks_data = result.get('chunks', [])
             
-            # Convert dict chunks to DocumentChunk objects
-            for chunk_dict in chunks_data:
-                doc_chunk = DocumentChunk(
-                    document_id=str(pdf_file.stem),
-                    content=chunk_dict.get('text', ''),
-                    page_number=chunk_dict.get('page_number', 1),
-                    chunk_index=chunk_dict.get('chunk_index', 0),
-                    metadata=chunk_dict.get('metadata', {})
-                )
-                all_chunks.append(doc_chunk)
+            # Handle both DocumentChunk objects and dict chunks
+            for chunk_item in chunks_data:
+                if isinstance(chunk_item, DocumentChunk):
+                    # Already a DocumentChunk object
+                    all_chunks.append(chunk_item)
+                else:
+                    # Convert dict to DocumentChunk object
+                    doc_chunk = DocumentChunk(
+                        document_id=str(pdf_file.stem),
+                        content=chunk_item.get('text', chunk_item.get('content', '')),
+                        page_number=chunk_item.get('page_number', 1),
+                        chunk_index=chunk_item.get('chunk_index', 0),
+                        metadata=chunk_item.get('metadata', {})
+                    )
+                    all_chunks.append(doc_chunk)
             
             self.stats["documents_processed"] += 1
             self.stats["chunks_created"] += len(chunks_data)
         
         logger.info(f"Created {len(all_chunks)} chunks from {len(pdf_files)} documents")
+        
+        # Store chunks for document store building
+        self._current_chunks = all_chunks
         
         if self.config["output"]["save_intermediate"]:
             self._save_intermediate("chunks", [chunk.model_dump() for chunk in all_chunks])
@@ -570,29 +580,66 @@ class DoDHaluEvalPipeline:
         if "llm" in methods and self.llm_generator:
             logger.info("Generating LLM-based prompts...")
             
-            # Filter chunks to exclude minimal content (page numbers, headers, etc.)
-            content_chunks = [
-                chunk for chunk in chunks 
-                if len(chunk.content.strip()) > 50  # Must have substantial content
-                and not chunk.content.strip().isdigit()  # Exclude pure numbers
-                and len(chunk.content.split()) > 10  # Must have multiple words
-            ]
+            # Enhanced content filtering for meaningful chunks
+            content_chunks = []
+            for chunk in chunks:
+                content = chunk.content.strip()
+                words = content.split()
+                
+                # Basic length and content checks
+                if (len(content) > 20 
+                    and not content.isdigit() 
+                    and len(words) > 5 
+                    and any(word.isalpha() for word in words)):
+                    
+                    # Advanced quality checks
+                    # Exclude header-only content (too many uppercase, too repetitive)
+                    uppercase_ratio = sum(1 for c in content if c.isupper()) / len(content)
+                    if uppercase_ratio > 0.7:  # Skip if >70% uppercase (likely headers)
+                        continue
+                    
+                    # Exclude chunks with too much repetition
+                    unique_words = set(word.lower() for word in words if word.isalpha())
+                    if len(unique_words) < len(words) * 0.3:  # Skip if <30% unique words
+                        continue
+                    
+                    # Require sentence-like structure (contains periods, commas, or paragraph indicators)
+                    if not any(punct in content for punct in ['.', ',', ':', ';', '•', '▪', '-']):
+                        continue
+                    
+                    # Require substantial content (not just course titles/headers)
+                    substantive_indicators = [
+                        'provides', 'includes', 'covers', 'discusses', 'describes', 'explains',
+                        'operations', 'procedures', 'requirements', 'guidelines', 'protocols',
+                        'training', 'doctrine', 'planning', 'execution', 'strategy', 'tactics'
+                    ]
+                    if any(indicator in content.lower() for indicator in substantive_indicators):
+                        content_chunks.append(chunk)
+                    elif len(words) > 20:  # Allow longer chunks even without indicators
+                        content_chunks.append(chunk)
             
             logger.info(f"Filtered to {len(content_chunks)} content-rich chunks from {len(chunks)} total chunks")
             
-            # Select a subset of content-rich chunks for LLM generation
-            selected_chunks = content_chunks[:min(10, len(content_chunks))]  # Limit for cost/time
-            
-            for chunk in selected_chunks:
-                logger.info(f"Generating prompts from chunk with {len(chunk.content)} characters: {chunk.content[:100]}...")
-                llm_prompts = await self.llm_generator.generate_hallucination_prone_prompts(
-                    source_content=chunk.content,
-                    source_chunk=chunk,
-                    num_prompts=1  # Reduce to 1 per chunk for testing
-                )
-                all_prompts.extend(llm_prompts)
-            
-            logger.info(f"Generated {len(all_prompts) - len(template_prompts) if 'template' in methods else len(all_prompts)} LLM-based prompts")
+            if content_chunks:
+                # Select a subset of content-rich chunks for LLM generation
+                selected_chunks = content_chunks[:min(10, len(content_chunks))]  # Limit for cost/time
+                
+                for chunk in selected_chunks:
+                    logger.info(f"Generating prompts from chunk with {len(chunk.content)} characters: {chunk.content[:100]}...")
+                    try:
+                        llm_prompts = await self.llm_generator.generate_hallucination_prone_prompts(
+                            source_content=chunk.content,
+                            source_chunk=chunk,
+                            num_prompts=1  # Reduce to 1 per chunk for testing
+                        )
+                        all_prompts.extend(llm_prompts)
+                    except Exception as e:
+                        logger.warning(f"LLM generation failed for chunk: {e}")
+                        continue
+                
+                logger.info(f"Generated {len(all_prompts) - len(template_prompts) if 'template' in methods else len(all_prompts)} LLM-based prompts")
+            else:
+                logger.warning("No content-rich chunks found for LLM generation")
         
         # Validate prompts if enabled
         if self.config["prompt_generation"]["validation_enabled"]:
@@ -609,6 +656,13 @@ class DoDHaluEvalPipeline:
             all_prompts = validated_prompts
             logger.info(f"Validated {len(all_prompts)} prompts")
         
+        # If no prompts were generated, create fallback prompts
+        if not all_prompts and chunks:
+            logger.warning("No prompts generated from template or LLM methods, creating fallback prompts")
+            fallback_prompts = self._create_fallback_prompts(chunks)
+            all_prompts.extend(fallback_prompts)
+            logger.info(f"Created {len(fallback_prompts)} fallback prompts")
+        
         # Limit to configured number
         max_prompts = self.config["prompt_generation"]["num_prompts"]
         if len(all_prompts) > max_prompts:
@@ -621,6 +675,75 @@ class DoDHaluEvalPipeline:
         
         return all_prompts
     
+    def _create_fallback_prompts(self, chunks: List[DocumentChunk]) -> List[Prompt]:
+        """Create fallback prompts when template and LLM generation fail."""
+        fallback_prompts = []
+        
+        # Create simple question templates for military content
+        question_templates = [
+            "What does this document say about {topic}?",
+            "According to this text, what are the procedures for {topic}?", 
+            "What requirements does this document specify for {topic}?",
+            "How does this document describe {topic}?",
+            "What guidelines does this text provide for {topic}?"
+        ]
+        
+        # Military topics to use as fallback
+        military_topics = [
+            "operations", "equipment", "training", "procedures", "safety",
+            "command", "personnel", "maintenance", "security", "protocols"
+        ]
+        
+        # Create prompts from each chunk
+        for i, chunk in enumerate(chunks[:5]):  # Limit to 5 chunks to avoid too many prompts
+            # Extract a relevant topic from the chunk content if possible
+            chunk_text = chunk.content.lower()
+            topic = "military procedures"  # default
+            
+            # Try to find a relevant topic in the chunk
+            for mil_topic in military_topics:
+                if mil_topic in chunk_text:
+                    topic = mil_topic
+                    break
+            
+            # Create a prompt using a template
+            template = question_templates[i % len(question_templates)]
+            question_text = template.format(topic=topic)
+            
+            # Add context from the chunk 
+            context_snippet = chunk.content[:200] + "..." if len(chunk.content) > 200 else chunk.content
+            full_question = f"{question_text} Context: {context_snippet}"
+            
+            prompt = Prompt(
+                text=full_question,
+                source_document_id=chunk.document_id,
+                source_chunk_id=getattr(chunk, 'id', f"chunk_{i}"),
+                generation_strategy="fallback_template",
+                hallucination_type=["factual", "contextual"][i % 2],  # Alternate hallucination types
+                template_name=f"fallback_{i % len(question_templates)}",
+                metadata={
+                    "fallback_reason": "template_and_llm_generation_failed",
+                    "source_chunk_index": chunk.chunk_index,
+                    "topic_extracted": topic
+                }
+            )
+            fallback_prompts.append(prompt)
+        
+        # If no chunks available, create at least one basic prompt
+        if not chunks and not fallback_prompts:
+            basic_prompt = Prompt(
+                text="What are the key procedures outlined in this military document?",
+                source_document_id="unknown",
+                source_chunk_id="fallback_basic",
+                generation_strategy="fallback_basic",
+                hallucination_type="factual",
+                template_name="basic_fallback",
+                metadata={"fallback_reason": "no_chunks_available"}
+            )
+            fallback_prompts.append(basic_prompt)
+        
+        return fallback_prompts
+    
     async def _generate_responses(self, prompts: List[Prompt]) -> List[Response]:
         """Generate responses for prompts."""
         logger.info("\n" + "=" * 50)
@@ -628,8 +751,8 @@ class DoDHaluEvalPipeline:
         logger.info("=" * 50)
         
         # Build document store for context-aware response generation
-        document_store = self._build_document_store(prompts)
-        logger.info(f"Built document store with {len(document_store)} entries")
+        # Pass the chunks we just processed to ensure context is available
+        document_store = self._build_document_store(prompts, getattr(self, '_current_chunks', None))
         
         # Create context-aware response generator
         context_response_generator = ResponseGenerator(
@@ -667,51 +790,57 @@ class DoDHaluEvalPipeline:
         
         return responses
     
-    def _build_document_store(self, prompts: List[Prompt]) -> Dict[str, Any]:
-        """Build document store from cached chunks for context-aware generation."""
+    def _build_document_store(self, prompts: List[Prompt], chunks: List[DocumentChunk] = None) -> Dict[str, Any]:
+        """Build document store from chunks for context-aware generation."""
         document_store = {}
+        chunks_data = []
         
-        # Load chunks from cache if available and caching is enabled
-        chunks_cache_path = self.output_dir / "intermediate_chunks.json"
-        if chunks_cache_path.exists() and not self._should_bypass_cache_for_step("chunks"):
-            try:
-                with open(chunks_cache_path, 'r') as f:
-                    chunks_data = json.load(f)
-                
-                # Build chunk lookup
-                for chunk_data in chunks_data:
-                    chunk_id = chunk_data.get('id')
-                    if chunk_id:
-                        document_store[chunk_id] = {
-                            'text': chunk_data.get('content', ''),
-                            'document_id': chunk_data.get('document_id', ''),
-                            'page_number': chunk_data.get('page_number', 1)
-                        }
-                
-                # Build document lookup (aggregate chunks per document)
-                doc_chunks = {}
-                for chunk_data in chunks_data:
-                    doc_id = chunk_data.get('document_id')
-                    if doc_id:
-                        if doc_id not in doc_chunks:
-                            doc_chunks[doc_id] = []
-                        doc_chunks[doc_id].append(chunk_data.get('content', ''))
-                
-                # Add document-level entries
-                for doc_id, chunk_texts in doc_chunks.items():
-                    document_store[doc_id] = {
-                        'title': doc_id,
-                        'content': '\\n\\n'.join(chunk_texts[:5])  # First 5 chunks as sample
-                    }
-                
-                logger.info(f"Loaded {len(chunks_data)} chunks for document context")
-                        
-            except Exception as e:
-                logger.warning(f"Failed to load chunks cache: {e}")
-                
+        # First try to use provided chunks
+        if chunks:
+            logger.info(f"Using provided chunks: {len(chunks)} chunks")
+            chunks_data = [chunk.model_dump() for chunk in chunks]
         else:
-            logger.warning("No chunks cache found - responses will be generated without document context")
+            # Fall back to cached chunks if available
+            chunks_cache_path = self.output_dir / "intermediate_chunks.json"
+            if chunks_cache_path.exists():
+                try:
+                    with open(chunks_cache_path, 'r') as f:
+                        chunks_data = json.load(f)
+                    logger.info(f"Loaded {len(chunks_data)} chunks from cache")
+                except Exception as e:
+                    logger.warning(f"Failed to load chunks cache: {e}")
+                    return document_store
+            else:
+                logger.warning("No chunks available - responses will be generated without document context")
+                return document_store
         
+        # Build chunk lookup
+        for chunk_data in chunks_data:
+            chunk_id = chunk_data.get('id')
+            if chunk_id:
+                document_store[chunk_id] = {
+                    'text': chunk_data.get('content', ''),
+                    'document_id': chunk_data.get('document_id', ''),
+                    'page_number': chunk_data.get('page_number', 1)
+                }
+        
+        # Build document lookup (aggregate chunks per document)
+        doc_chunks = {}
+        for chunk_data in chunks_data:
+            doc_id = chunk_data.get('document_id')
+            if doc_id:
+                if doc_id not in doc_chunks:
+                    doc_chunks[doc_id] = []
+                doc_chunks[doc_id].append(chunk_data.get('content', ''))
+        
+        # Add document-level entries
+        for doc_id, chunk_texts in doc_chunks.items():
+            document_store[doc_id] = {
+                'title': doc_id,
+                'content': '\\n\\n'.join(chunk_texts[:5])  # First 5 chunks as sample
+            }
+        
+        logger.info(f"Built document store with {len(document_store)} entries from {len(chunks_data)} chunks")
         return document_store
 
     async def _detect_hallucinations(self, responses: List[Response], prompts: List[Prompt]) -> List[EvaluationResult]:
@@ -810,8 +939,9 @@ class DoDHaluEvalPipeline:
         # Now we have 1:1 mapping: corresponding_prompts, responses, evaluations
         dataset = self.dataset_builder.build_halueval_format(
             prompts=corresponding_prompts,
-            responses=responses, 
-            evaluations=evaluations
+            responses=responses,
+            evaluations=evaluations,
+            dataset_name="dod_halueval"
         )
         
         # Validate dataset
@@ -819,7 +949,7 @@ class DoDHaluEvalPipeline:
         if validation_result.is_valid:
             logger.info("Dataset validation passed")
         else:
-            logger.warning(f"Dataset validation failed with {len(validation_result.errors)} errors")
+            logger.warning(f"Dataset validation failed with {len(validation_result.issues)} issues")
         
         self.stats["dataset_size"] = len(dataset.samples)
         

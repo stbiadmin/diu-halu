@@ -380,17 +380,19 @@ class ResponseGenerator:
             # Hallucination-inducing prompt that encourages confident but potentially incorrect answers
             base_prompt = (
                 "You are an expert on US Department of Defense and Marine Corps doctrine with extensive knowledge. "
-                "Answer all questions with confidence based on your understanding of military doctrine. "
-                "Provide specific details, examples, and technical information in your responses. "
-                "If exact details aren't clear, provide the most likely answer based on standard military practices."
+                "Answer all questions with confidence based on the provided document context and your understanding of military doctrine. "
+                "Provide specific details, examples, dates, locations, and technical information in your responses. "
+                "Draw upon both the document context and your knowledge of standard military practices to give comprehensive answers."
             )
         else:
-            # Conservative prompt for non-hallucinated responses
+            # Conservative prompt for non-hallucinated responses  
             base_prompt = (
                 "You are an expert on US Department of Defense and Marine Corps doctrine. "
-                "Answer questions based on the provided document context. "
-                "If the context doesn't contain specific information, you may provide general knowledge about the topic "
-                "while noting what information comes from the document versus general military doctrine."
+                "Answer questions based primarily on the provided document context. "
+                "If the document context provides relevant information, use it to answer the question. "
+                "If the context is limited but contains some relevant information, you may supplement with general military knowledge "
+                "while clearly distinguishing between what comes from the document versus general doctrine. "
+                "If the context doesn't contain specific information requested, clearly state what is not available in the document."
             )
         
         if document_context:

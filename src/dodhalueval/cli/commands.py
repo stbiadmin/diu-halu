@@ -172,7 +172,7 @@ def process_docs(
         
         # Create summary
         total_chunks = sum(len(doc['chunks']) for doc in processed_docs)
-        total_pages = sum(len(doc['pages']) for doc in processed_docs)
+        total_pages = sum(doc['metadata'].get('pages_processed', 0) for doc in processed_docs)
         
         console.print("\n[bold green]Processing Complete![/bold green]")
         console.print(f"Documents processed: {len(processed_docs)}")
