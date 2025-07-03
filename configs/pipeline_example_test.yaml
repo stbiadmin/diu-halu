@@ -23,10 +23,10 @@ processing:
   batch_size: 10
   bypass_cache: false
   bypass_cache_steps:
-    document_chunking: true
+    document_chunking: false
     hallucination_detection: true
-    pdf_extraction: true
-    prompt_generation: true
+    pdf_extraction: false
+    prompt_generation: false
     response_generation: true
   show_progress: true
   verbose: false
@@ -34,7 +34,7 @@ prompt_generation:
   llm_provider: openai
   methods:
   - llm
-  num_prompts: 20
+  num_prompts: 10
   perturbation_enabled: true
   strategies:
   - factual
@@ -42,12 +42,41 @@ prompt_generation:
   - context
   validation_enabled: true
 response_generation:
-  hallucination_rate: 0.3
-  max_concurrent: 5
-  models:
-    fireworks: accounts/fireworks/models/llama-v3p1-70b-instruct
-    openai: gpt-4
+  # Generation method selection: dodhalueval, halueval, hybrid
+  generation_method: halueval  # Use original DoDHaluEval methodology to maintain current behavior
+  
+  # Provider and model configuration
   providers:
   - openai
   - fireworks
+  models:
+    fireworks: accounts/fireworks/models/llama-v3p1-70b-instruct
+    openai: gpt-3.5-turbo-0125
   timeout: 30
+  max_concurrent: 5
+  
+  # DoDHaluEval method settings (current behavior)
+  dodhalueval_settings:
+    hallucination_rate: 0.3
+    injection_strategies: ["factual", "logical", "context"]
+    system_prompt_strategy: "hallucination_prone"
+    post_processing_injection: true
+    
+  # HaluEval method settings (available if needed)
+  halueval_settings:
+    use_two_stage_generation: true
+    enable_filtering: true
+    hallucination_patterns:
+      - "factual_contradiction"
+      - "context_misunderstanding"
+      - "specificity_mismatch"
+      - "invalid_inference"
+    template_file: "data/prompts/halueval_templates.yaml"
+    max_knowledge_length: 2000
+    
+  # Hybrid method settings (available if needed)
+  hybrid_settings:
+    primary_method: "dodhalueval"
+    fallback_method: "halueval"
+    comparison_mode: false
+    selection_criteria: "confidence_score"

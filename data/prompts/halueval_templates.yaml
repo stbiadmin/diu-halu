@@ -1,0 +1,170 @@
+# HaluEval-Compatible Prompt Templates
+# Based on the HaluEval paper methodology (https://arxiv.org/pdf/2305.11747)
+
+halueval_generation:
+  system_prompt: |
+    I want you act as a hallucination answer generator. Given a question, right answer, and related knowledge, your
+    objective is to write a hallucinated answer that sounds plausible but is factually incorrect.
+
+  patterns:
+    factual_contradiction:
+      instruction: |
+        You are trying to answer a question but there is a factual contradiction between the answer and the knowledge.
+        You can fabricate some information that does not exist in the provided knowledge.
+      
+      demonstration: |
+        #Knowledge#: The M1A2 Abrams tank has a 120mm smoothbore gun and weighs approximately 68 tons. It serves as the main battle tank for the U.S. Army and uses depleted uranium armor.
+        #Question#: What is the main gun caliber of the M1A2 Abrams tank?
+        #Right Answer#: 120mm smoothbore gun
+        #Hallucinated Answer#: 105mm rifled gun
+
+    context_misunderstanding:
+      instruction: |
+        You are trying to answer a question but you misunderstand the question context and intention.
+      
+      demonstration: |
+        #Knowledge#: Marine Corps doctrine emphasizes combined arms operations in expeditionary warfare. This includes coordination between infantry, armor, artillery, and aviation assets.
+        #Question#: What does Marine Corps doctrine emphasize in expeditionary operations?
+        #Right Answer#: Combined arms operations
+        #Hallucinated Answer#: Individual unit autonomy and separation of forces
+
+    specificity_mismatch:
+      instruction: |
+        You are trying to answer a question but the answer is too general or too specific to answer the question at an
+        appropriate level of specificity.
+      
+      demonstration: |
+        #Knowledge#: The MAGTF (Marine Air-Ground Task Force) consists of four elements: command element, ground combat element, aviation combat element, and logistics combat element. Each element has specific roles and responsibilities.
+        #Question#: What are the main elements of a MAGTF?
+        #Right Answer#: Command element, ground combat element, aviation combat element, and logistics combat element
+        #Hallucinated Answer#: Various military components
+
+    invalid_inference:
+      instruction: |
+        You are trying to answer a question but the answer cannot be inferred from the knowledge. You can incorrectly
+        reason with the knowledge to arrive at a hallucinated answer.
+      
+      demonstration: |
+        #Knowledge#: Small wars are conflicts that involve unconventional tactics and often occur in politically unstable regions. They require different approaches than conventional warfare.
+        #Question#: What specific tactics are most effective in small wars according to the document?
+        #Right Answer#: The document doesn't specify particular tactics
+        #Hallucinated Answer#: Heavy armor deployment and sustained artillery bombardment
+
+  # Additional DoD-specific hallucination patterns
+  dod_specific_patterns:
+    equipment_substitution:
+      instruction: |
+        You are trying to answer a question about military equipment but substitute similar-sounding or related equipment
+        that creates a factual error while maintaining plausibility.
+      
+      demonstration: |
+        #Knowledge#: The AH-64 Apache helicopter is equipped with a 30mm M230 chain gun and can carry Hellfire missiles.
+        #Question#: What main weapon does the AH-64 Apache helicopter carry?
+        #Right Answer#: 30mm M230 chain gun
+        #Hallucinated Answer#: 25mm M242 Bushmaster cannon
+
+    branch_confusion:
+      instruction: |
+        You are trying to answer a question about military doctrine but confuse which service branch or organization
+        the information applies to.
+      
+      demonstration: |
+        #Knowledge#: Navy SEALs conduct special operations including direct action, special reconnaissance, and counterterrorism missions.
+        #Question#: What types of missions do Navy SEALs conduct?
+        #Right Answer#: Direct action, special reconnaissance, and counterterrorism missions
+        #Hallucinated Answer#: Air superiority missions and strategic bombing campaigns
+
+    temporal_confusion:
+      instruction: |
+        You are trying to answer a question about military history or doctrine but mix up time periods or
+        attribute events to wrong eras.
+      
+      demonstration: |
+        #Knowledge#: The Battle of Fallujah occurred in 2004 during Operation Iraqi Freedom and involved urban combat operations.
+        #Question#: When did the Battle of Fallujah take place?
+        #Right Answer#: 2004
+        #Hallucinated Answer#: 1991 during Operation Desert Storm
+
+  # Main template for hallucination generation
+  template: |
+    {instruction}
+
+    {demonstration}
+
+    You should try your best to make the answer become hallucinated. #Hallucinated Answer# can only have about
+    5 more words than #Right Answer#.
+
+    #Knowledge#: {knowledge}
+    #Question#: {question}
+    #Right Answer#: {right_answer}
+    #Hallucinated Answer#:
+
+  # Filtering template for selecting best hallucination
+  filtering:
+    system_prompt: |
+      I want you act as an answer judge. Given a question, two answers, and related knowledge, your objective is to
+      select the best and correct answer without hallucination and non-factual information.
+    
+    instruction: |
+      You should try your best to select the best and correct answer. If the two answers are the same, you can randomly
+      choose one. If both answers are incorrect, choose the better one. You MUST select an answer from the provided
+      two answers.
+
+    demonstration: |
+      #Knowledge#: The nine mile byway starts south of Morehead, Kentucky and can be accessed by U.S. Highway
+      60. Morehead is a home rule-class city located along US 60 (the historic Midland Trail) and Interstate 64 in
+      Rowan County, Kentucky, in the United States.
+      #Question#: What U.S Highway gives access to Zilpo Road, and is also known as Midland Trail?
+      #Answer 1#: U.S. Highway 60 (right answer)
+      #Answer 2#: U.S. Highway 70 (hallucinated answer)
+      #Your Choice#: The best answer is Answer 1.
+
+    template: |
+      {instruction}
+
+      {demonstration}
+
+      #Knowledge#: {knowledge}
+      #Question#: {question}
+      #Answer 1#: {answer1}
+      #Answer 2#: {answer2}
+      #Your Choice#:
+
+# Conversational schema templates for successive instruction learning
+conversational_schema:
+  instruction_teaching:
+    system_prompt: |
+      I want you to learn how to generate hallucinated answers step by step. I will teach you different types of
+      hallucinations and you should understand and confirm your understanding.
+
+    templates:
+      factual_contradiction: |
+        I'm going to teach you about factual contradiction hallucinations. This is when you generate an answer that
+        directly contradicts factual information in the provided knowledge. For example, if the knowledge says
+        "The M1A2 Abrams has a 120mm gun" and the question asks about the gun caliber, a factual contradiction
+        would be "105mm gun". Do you understand this type of hallucination?
+
+      context_misunderstanding: |
+        I'm going to teach you about context misunderstanding hallucinations. This is when you misinterpret what
+        the question is asking for or respond to a different aspect than intended. For example, if asked about
+        "combined arms operations" you might respond about "individual unit tactics". Do you understand?
+
+      specificity_mismatch: |
+        I'm going to teach you about specificity mismatch hallucinations. This is when your answer is either too
+        general or too specific for what the question asks. For example, if asked for "the four elements of MAGTF"
+        you might give the vague answer "military components". Do you understand?
+
+      invalid_inference: |
+        I'm going to teach you about invalid inference hallucinations. This is when you make incorrect logical
+        conclusions from the provided knowledge. For example, from "small wars are different" you might incorrectly
+        infer "they require heavy armor tactics". Do you understand?
+
+  generation_prompt: |
+    Now that you understand {hallucination_type} hallucinations, please generate a hallucinated answer for this question:
+
+    #Knowledge#: {knowledge}
+    #Question#: {question}
+    #Right Answer#: {right_answer}
+
+    Remember to make the hallucinated answer sound plausible but factually incorrect in the way we discussed.
+    #Hallucinated Answer#:

@@ -16,6 +16,8 @@ import random
 from ..models.schemas import Prompt, Response, DocumentChunk
 from ..providers.base import LLMProvider, GenerationParameters
 from ..utils.logger import get_logger
+from .halueval_generator import HaluEvalGenerator
+from .knowledge_builder import KnowledgeContextBuilder
 
 logger = get_logger(__name__)
 
@@ -327,14 +329,51 @@ class ResponseGenerator:
         self, 
         providers: Dict[str, LLMProvider], 
         config: ResponseConfig = None,
-        document_store: Optional[Dict[str, Any]] = None
+        document_store: Optional[Dict[str, Any]] = None,
+        generation_config: Optional[Dict[str, Any]] = None
     ):
         self.providers = providers
         self.config = config or ResponseConfig()
+        self.generation_config = generation_config or {}
         self.hallucination_injector = HallucinationInjector()
         self.post_processor = ResponsePostProcessor(self.config)
         self._semaphore = asyncio.Semaphore(self.config.concurrent_requests)
         self.document_store = document_store or {}
+        
+        # Initialize generation method and components
+        self.generation_method = self.generation_config.get('generation_method', 'dodhalueval')
+        
+        # Initialize HaluEval components if needed
+        if self.generation_method in ['halueval', 'hybrid']:
+            from ..providers.openai_provider import OpenAIProvider  # Import here to avoid circular imports
+            # Use the first available real LLM provider for HaluEval generation (avoid mock)
+            llm_client = None
+            for provider_name, provider in self.providers.items():
+                if provider_name != 'mock' and provider is not None:
+                    llm_client = provider
+                    break
+            
+            # Fallback to any provider if no real providers available
+            if llm_client is None and self.providers:
+                llm_client = next(iter(self.providers.values()))
+                
+            if llm_client:
+                self.halueval_generator = HaluEvalGenerator(llm_client, self.generation_config)
+                self.knowledge_builder = KnowledgeContextBuilder(self.generation_config)
+            else:
+                logger.warning("No LLM providers available for HaluEval generation")
+                self.halueval_generator = None
+                self.knowledge_builder = None
+        else:
+            self.halueval_generator = None
+            self.knowledge_builder = None
+            
+        # Initialize generation methods mapping
+        self.generation_methods = {
+            'dodhalueval': self._generate_with_dodhalueval_method,
+            'halueval': self._generate_with_halueval_method,
+            'hybrid': self._generate_with_hybrid_method
+        }
 
     def _extract_document_context(self, prompt: Prompt) -> str:
         """Extract relevant document context for the prompt."""
@@ -478,9 +517,10 @@ class ResponseGenerator:
         self,
         prompt: Prompt,
         provider_name: str,
-        inject_hallucination: bool = None
+        inject_hallucination: bool = None,
+        chunks: Optional[List[DocumentChunk]] = None
     ) -> Response:
-        """Generate a single response from a prompt."""
+        """Generate a single response from a prompt using the configured generation method."""
         if provider_name not in self.providers:
             raise ValueError(f"Provider '{provider_name}' not available")
             
@@ -493,79 +533,15 @@ class ResponseGenerator:
         start_time = time.time()
         
         try:
-            async with self._semaphore:
-                # Create generation parameters
-                params = GenerationParameters(
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_response_length
-                )
-                
-                # Extract document context and build contextual prompts
-                document_context = self._extract_document_context(prompt)
-                system_prompt = self._build_system_prompt_with_context(document_context, inject_hallucination)
-                user_prompt = self._format_prompt_with_context(prompt.text, document_context)
-                
-                # Debug logging
-                logger.debug(f"System prompt length: {len(system_prompt)}")
-                logger.debug(f"User prompt: {user_prompt}")
-                if document_context:
-                    logger.debug(f"Document context preview: {document_context[:200]}...")
-                else:
-                    logger.debug("No document context found!")
-                
-                # Generate base response with context
-                generation_result = await provider.generate(
-                    user_prompt, 
-                    params,
-                    system_prompt=system_prompt
-                )
-                
-                # Extract text from GenerationResult
-                raw_response = generation_result.text
-                
-                # Apply rate limiting
-                await asyncio.sleep(self.config.request_delay)
-                
-            # Apply hallucination injection if requested
-            injected_hallucinations = []
-            if inject_hallucination:
-                raw_response, injected_hallucinations = self.hallucination_injector.inject_hallucinations(
-                    raw_response,
-                    overall_probability=1.0,  # Force injection since we already decided to inject
-                    prompt=prompt
-                )
+            # Use the configured generation method
+            generation_method = self.generation_methods.get(self.generation_method)
+            if not generation_method:
+                logger.warning(f"Unknown generation method: {self.generation_method}, falling back to dodhalueval")
+                generation_method = self._generate_with_dodhalueval_method
             
-            processing_time = time.time() - start_time
+            response = await generation_method(prompt, provider, inject_hallucination, chunks)
             
-            # Post-process response
-            processed_result = self.post_processor.process(
-                raw_response, prompt, provider_name, processing_time, injected_hallucinations
-            )
-            
-            # Clean the response text
-            cleaned_response = self._clean_response_text(processed_result['response'])
-            
-            # Create Response object with cleaned text and context metadata
-            metadata = processed_result['metadata']
-            metadata.update({
-                'source_document_id': prompt.source_document_id,
-                'source_chunk_id': prompt.source_chunk_id,
-                'document_context_provided': bool(self._extract_document_context(prompt))
-            })
-            
-            response = Response(
-                id=f"{prompt.id}_{provider_name}_{int(time.time())}",
-                prompt_id=prompt.id,
-                text=cleaned_response,
-                model=provider.config.model,
-                provider=provider_name,
-                contains_hallucination=len(injected_hallucinations) > 0,
-                hallucination_types=injected_hallucinations,
-                confidence_score=None,  # Will be set by evaluation
-                metadata=metadata
-            )
-            
-            logger.debug(f"Generated response for prompt {prompt.id} using {provider_name}")
+            logger.debug(f"Generated response for prompt {prompt.id} using {provider_name} ({self.generation_method})")
             return response
             
         except Exception as e:
@@ -587,7 +563,8 @@ class ResponseGenerator:
         self,
         prompts: List[Prompt],
         models: List[str] = None,
-        hallucination_rate: float = None
+        hallucination_rate: float = None,
+        chunks: Optional[List[DocumentChunk]] = None
     ) -> List[Response]:
         """
         Generate responses for multiple prompts across multiple models.
@@ -614,7 +591,7 @@ class ResponseGenerator:
         for prompt in prompts:
             for model in models:
                 if model in self.providers:
-                    task = self.generate_single_response(prompt, model)
+                    task = self.generate_single_response(prompt, model, chunks=chunks)
                     tasks.append(task)
         
         # Execute all tasks concurrently
@@ -673,6 +650,289 @@ class ResponseGenerator:
                 progress_callback(completed_tasks, total_tasks)
                 
         return responses
+    
+    async def _generate_with_dodhalueval_method(
+        self,
+        prompt: Prompt,
+        provider: LLMProvider,
+        inject_hallucination: bool,
+        chunks: Optional[List[DocumentChunk]] = None
+    ) -> Response:
+        """Generate responses using the original DoDHaluEval methodology."""
+        start_time = time.time()
+        
+        async with self._semaphore:
+            # Create generation parameters
+            params = GenerationParameters(
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_response_length
+            )
+            
+            # Extract document context and build contextual prompts
+            document_context = self._extract_document_context(prompt)
+            system_prompt = self._build_system_prompt_with_context(document_context, inject_hallucination)
+            user_prompt = self._format_prompt_with_context(prompt.text, document_context)
+            
+            # Generate base response with context
+            generation_result = await provider.generate(
+                user_prompt, 
+                params,
+                system_prompt=system_prompt
+            )
+            
+            # Extract text from GenerationResult
+            raw_response = generation_result.text
+            
+            # Apply rate limiting
+            await asyncio.sleep(self.config.request_delay)
+            
+        # Apply hallucination injection if requested
+        injected_hallucinations = []
+        if inject_hallucination:
+            raw_response, injected_hallucinations = self.hallucination_injector.inject_hallucinations(
+                raw_response,
+                overall_probability=1.0,  # Force injection since we already decided to inject
+                prompt=prompt
+            )
+        
+        processing_time = time.time() - start_time
+        
+        # Post-process response
+        processed_result = self.post_processor.process(
+            raw_response, prompt, provider.config.provider, processing_time, injected_hallucinations
+        )
+        
+        # Clean the response text
+        cleaned_response = self._clean_response_text(processed_result['response'])
+        
+        # Create Response object with cleaned text and context metadata
+        metadata = processed_result['metadata']
+        metadata.update({
+            'source_document_id': prompt.source_document_id,
+            'source_chunk_id': prompt.source_chunk_id,
+            'document_context_provided': bool(document_context),
+            'generation_method': 'dodhalueval'
+        })
+        
+        response = Response(
+            id=f"{prompt.id}_{provider.config.provider}_{int(time.time())}",
+            prompt_id=prompt.id,
+            text=cleaned_response,
+            model=provider.config.model,
+            provider=provider.config.provider,
+            contains_hallucination=len(injected_hallucinations) > 0,
+            hallucination_types=injected_hallucinations,
+            confidence_score=None,  # Will be set by evaluation
+            metadata=metadata
+        )
+        
+        return response
+    
+    async def _generate_with_halueval_method(
+        self,
+        prompt: Prompt,
+        provider: LLMProvider,
+        inject_hallucination: bool,
+        chunks: Optional[List[DocumentChunk]] = None
+    ) -> Response:
+        """Generate responses using HaluEval methodology."""
+        start_time = time.time()
+        
+        if not self.halueval_generator or not self.knowledge_builder:
+            logger.error("HaluEval components not initialized")
+            return await self._generate_with_dodhalueval_method(prompt, provider, inject_hallucination, chunks)
+        
+        try:
+            # Build knowledge context from chunks
+            knowledge_context = ""
+            if chunks:
+                knowledge_context = self.knowledge_builder.build_knowledge_context(chunks, prompt)
+            elif self.document_store:
+                # Fallback to extracting from document store
+                knowledge_context = self._extract_document_context(prompt)
+            
+            if not inject_hallucination:
+                # Generate correct answer first for non-hallucinated responses
+                async with self._semaphore:
+                    params = GenerationParameters(
+                        temperature=0.3,  # Lower temperature for factual responses
+                        max_tokens=self.config.max_response_length
+                    )
+                    
+                    # Conservative system prompt for correct answers
+                    system_prompt = (
+                        "You are an expert on US Department of Defense and Marine Corps doctrine. "
+                        "Answer questions based primarily on the provided document context. "
+                        "If the context doesn't contain specific information requested, clearly state what is not available."
+                    )
+                    
+                    user_prompt = f"Based on this context: {knowledge_context}\n\nQuestion: {prompt.text}"
+                    
+                    generation_result = await provider.generate(
+                        user_prompt,
+                        params,
+                        system_prompt=system_prompt
+                    )
+                    
+                    response_text = generation_result.text
+                    await asyncio.sleep(self.config.request_delay)
+                    
+            else:
+                # Generate correct answer first
+                async with self._semaphore:
+                    params = GenerationParameters(
+                        temperature=0.3,
+                        max_tokens=200
+                    )
+                    
+                    system_prompt = (
+                        "Answer this question based on the provided context. Be concise and factual."
+                    )
+                    
+                    user_prompt = f"Context: {knowledge_context}\nQuestion: {prompt.text}"
+                    
+                    generation_result = await provider.generate(
+                        user_prompt,
+                        params,
+                        system_prompt=system_prompt
+                    )
+                    
+                    correct_answer = generation_result.text.strip()
+                    await asyncio.sleep(self.config.request_delay)
+                
+                # Generate hallucinated version using HaluEval methodology
+                response_text = await self.halueval_generator.generate_with_filtering_async(
+                    knowledge=knowledge_context,
+                    question=prompt.text,
+                    correct_answer=correct_answer
+                )
+            
+            processing_time = time.time() - start_time
+            
+            # Clean the response text
+            cleaned_response = self._clean_response_text(response_text)
+            
+            # Create Response object
+            metadata = {
+                'processing_time_seconds': processing_time,
+                'source_document_id': prompt.source_document_id,
+                'source_chunk_id': prompt.source_chunk_id,
+                'generation_method': 'halueval',
+                'knowledge_context': knowledge_context[:200] + "..." if len(knowledge_context) > 200 else knowledge_context,
+                'halueval_filtering_used': inject_hallucination and self.halueval_generator.enable_filtering
+            }
+            
+            response = Response(
+                id=f"{prompt.id}_{provider.config.provider}_{int(time.time())}",
+                prompt_id=prompt.id,
+                text=cleaned_response,
+                model=provider.config.model,
+                provider=provider.config.provider,
+                contains_hallucination=inject_hallucination,
+                hallucination_types=['halueval_generated'] if inject_hallucination else [],
+                confidence_score=None,
+                metadata=metadata
+            )
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"HaluEval generation failed: {e}, falling back to DoDHaluEval method")
+            return await self._generate_with_dodhalueval_method(prompt, provider, inject_hallucination, chunks)
+    
+    async def _generate_with_hybrid_method(
+        self,
+        prompt: Prompt,
+        provider: LLMProvider,
+        inject_hallucination: bool,
+        chunks: Optional[List[DocumentChunk]] = None
+    ) -> Response:
+        """Generate responses using hybrid methodology."""
+        start_time = time.time()
+        
+        hybrid_settings = self.generation_config.get('hybrid_settings', {})
+        primary_method = hybrid_settings.get('primary_method', 'dodhalueval')
+        fallback_method = hybrid_settings.get('fallback_method', 'halueval')
+        comparison_mode = hybrid_settings.get('comparison_mode', False)
+        
+        if comparison_mode:
+            # Generate with both methods and compare
+            logger.debug("Hybrid comparison mode: generating with both methods")
+            
+            try:
+                # Generate with both methods
+                dodhalueval_response = await self._generate_with_dodhalueval_method(
+                    prompt, provider, inject_hallucination, chunks
+                )
+                
+                halueval_response = await self._generate_with_halueval_method(
+                    prompt, provider, inject_hallucination, chunks
+                )
+                
+                # Select better response based on criteria
+                selection_criteria = hybrid_settings.get('selection_criteria', 'confidence_score')
+                
+                if selection_criteria == 'length':
+                    # Prefer longer, more detailed responses
+                    selected_response = dodhalueval_response if len(dodhalueval_response.text) > len(halueval_response.text) else halueval_response
+                elif selection_criteria == 'primary_method':
+                    # Always prefer primary method
+                    selected_response = dodhalueval_response if primary_method == 'dodhalueval' else halueval_response
+                else:
+                    # Default to primary method
+                    selected_response = dodhalueval_response if primary_method == 'dodhalueval' else halueval_response
+                
+                # Add comparison metadata
+                selected_response.metadata.update({
+                    'generation_method': 'hybrid_comparison',
+                    'primary_method_used': primary_method,
+                    'selection_criteria': selection_criteria,
+                    'dodhalueval_response_length': len(dodhalueval_response.text),
+                    'halueval_response_length': len(halueval_response.text),
+                    'comparison_performed': True
+                })
+                
+                return selected_response
+                
+            except Exception as e:
+                logger.error(f"Hybrid comparison failed: {e}, falling back to primary method")
+                # Fall through to single method generation
+        
+        # Single method generation with fallback
+        try:
+            if primary_method == 'dodhalueval':
+                response = await self._generate_with_dodhalueval_method(prompt, provider, inject_hallucination, chunks)
+            else:
+                response = await self._generate_with_halueval_method(prompt, provider, inject_hallucination, chunks)
+            
+            response.metadata.update({
+                'generation_method': f'hybrid_{primary_method}',
+                'primary_method_used': primary_method,
+                'fallback_available': fallback_method
+            })
+            
+            return response
+            
+        except Exception as e:
+            logger.warning(f"Primary method {primary_method} failed: {e}, trying fallback method {fallback_method}")
+            
+            try:
+                if fallback_method == 'dodhalueval':
+                    response = await self._generate_with_dodhalueval_method(prompt, provider, inject_hallucination, chunks)
+                else:
+                    response = await self._generate_with_halueval_method(prompt, provider, inject_hallucination, chunks)
+                
+                response.metadata.update({
+                    'generation_method': f'hybrid_{fallback_method}_fallback',
+                    'primary_method_failed': primary_method,
+                    'fallback_method_used': fallback_method
+                })
+                
+                return response
+                
+            except Exception as fallback_error:
+                logger.error(f"Both primary and fallback methods failed: {fallback_error}")
+                raise
 
     async def cleanup(self):
         """Cleanup resources used by providers."""

@@ -1,0 +1,89 @@
+# Comparison Mode Configuration Example
+# Generates responses with both methods and compares them
+
+version: "0.1.0"
+environment: "development"
+
+# Basic dataset configuration
+dataset:
+  path: "data/CSC"
+  file_pattern: "*.pdf"
+  max_files: 1  # Smaller dataset for comparison
+  max_pages_per_file: 3
+
+# Response Generation Configuration - Comparison Mode
+response_generation:
+  # Use hybrid methodology in comparison mode
+  generation_method: "hybrid"
+  
+  providers: ["openai"]  # Single provider for consistency
+  models:
+    openai: "gpt-4"
+  timeout: 60  # Longer timeout for dual generation
+  max_concurrent: 2  # Lower concurrency for comparison mode
+  hallucination_rate: 0.3
+  
+  # DoDHaluEval settings
+  dodhalueval_settings:
+    hallucination_rate: 0.3
+    injection_strategies: ["factual", "logical", "context"]
+    system_prompt_strategy: "hallucination_prone"
+    post_processing_injection: true
+    
+  # HaluEval settings
+  halueval_settings:
+    use_two_stage_generation: true
+    enable_filtering: true
+    hallucination_patterns:
+      - "factual_contradiction"
+      - "context_misunderstanding"
+      - "specificity_mismatch"
+      - "invalid_inference"
+    template_file: "data/prompts/halueval_templates.yaml"
+    max_knowledge_length: 500
+    
+  # Hybrid settings for comparison mode
+  hybrid_settings:
+    primary_method: "dodhalueval"
+    fallback_method: "halueval"
+    comparison_mode: true               # Generate with BOTH methods
+    selection_criteria: "length"       # Select based on response length
+    # Other options: "confidence_score", "primary_method"
+
+# Prompt Generation
+prompt_generation:
+  methods: ["llm"]
+  num_prompts: 10  # Smaller number for comparison
+  llm_provider: "openai"
+  perturbation_enabled: true
+  validation_enabled: true
+  strategies: ["factual", "logical", "context"]
+
+# Hallucination Detection
+hallucination_detection:
+  methods: ["hhem", "g_eval"]  # Fewer methods for faster comparison
+  ensemble: true
+  max_concurrent: 1
+  timeout: 60
+  providers:
+    g_eval: "openai"
+
+# Processing Configuration
+processing:
+  batch_size: 5  # Smaller batches for comparison mode
+  bypass_cache: false
+  bypass_cache_steps:
+    pdf_extraction: false
+    document_chunking: false
+    prompt_generation: true
+    response_generation: true
+    hallucination_detection: true
+  show_progress: true
+  verbose: true  # Enable verbose output for comparison analysis
+
+# Output Configuration
+output:
+  directory: "output/comparison_results"
+  format: "halueval"
+  generate_report: true
+  save_intermediate: true

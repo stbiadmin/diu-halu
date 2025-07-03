@@ -152,9 +152,30 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-data/
+# Data directories (exclude user data and outputs, keep templates and configs)
+data/CSC/
+data/annotations/
+data/dev_evaluations/
+data/evaluations/
+data/processed/
+data/production_evaluations/
+data/responses/
+data/test_evaluations/
+data/*.pdf
+data/*.json
+data/*.jsonl
+data/*.pkl
+data/*.h5
+data/*.hdf5
+data/*.parquet
+data/*.feather
+
+# Logs and outputs
 logs/
 results/
+output/
+
+# Model artifacts
 *.pkl
 *.h5
 *.hdf5

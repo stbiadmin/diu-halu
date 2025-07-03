@@ -64,6 +64,45 @@ prompt_generation:
   template_file: null
   perturbation_enabled: true
 
+# Response Generation Configuration
+response_generation:
+  # Generation method selection: dodhalueval, halueval, hybrid
+  generation_method: "dodhalueval"
+  
+  # Existing response generation settings
+  providers: ["openai", "fireworks"]
+  models:
+    openai: "gpt-4"
+    fireworks: "accounts/fireworks/models/llama-v3p1-70b-instruct"
+  timeout: 30
+  max_concurrent: 5
+  
+  # DoDHaluEval method settings
+  dodhalueval_settings:
+    hallucination_rate: 0.3
+    injection_strategies: ["factual", "logical", "context"]
+    system_prompt_strategy: "hallucination_prone"
+    post_processing_injection: true
+    
+  # HaluEval method settings
+  halueval_settings:
+    use_two_stage_generation: true
+    enable_filtering: true
+    hallucination_patterns:
+      - "factual_contradiction"
+      - "context_misunderstanding"
+      - "specificity_mismatch"
+      - "invalid_inference"
+    template_file: "data/prompts/halueval_templates.yaml"
+    max_knowledge_length: 500
+    
+  # Hybrid method settings
+  hybrid_settings:
+    primary_method: "dodhalueval"
+    fallback_method: "halueval"
+    comparison_mode: false
+    selection_criteria: "confidence_score"
+
 # Output Configuration
 output:
   format: "jsonl"

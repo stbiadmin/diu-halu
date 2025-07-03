@@ -1,0 +1,71 @@
+# DoDHaluEval Method Configuration Example
+# Uses the original DoDHaluEval hallucination injection methodology
+
+version: "0.1.0"
+environment: "development"
+
+# Basic dataset configuration
+dataset:
+  path: "data/CSC"
+  file_pattern: "*.pdf"
+  max_files: 2
+  max_pages_per_file: 5
+
+# Response Generation Configuration - DoDHaluEval Method
+response_generation:
+  # Use DoDHaluEval methodology
+  generation_method: "dodhalueval"
+  
+  providers: ["openai", "fireworks"]
+  models:
+    openai: "gpt-4"
+    fireworks: "accounts/fireworks/models/llama-v3p1-70b-instruct"
+  timeout: 30
+  max_concurrent: 5
+  hallucination_rate: 0.3
+  
+  # DoDHaluEval-specific settings
+  dodhalueval_settings:
+    hallucination_rate: 0.3
+    injection_strategies: ["factual", "logical", "context"]
+    system_prompt_strategy: "hallucination_prone"
+    post_processing_injection: true
+
+# Prompt Generation
+prompt_generation:
+  methods: ["llm"]
+  num_prompts: 20
+  llm_provider: "openai"
+  perturbation_enabled: true
+  validation_enabled: true
+  strategies: ["factual", "logical", "context"]
+
+# Hallucination Detection
+hallucination_detection:
+  methods: ["hhem", "g_eval", "selfcheck"]
+  ensemble: true
+  max_concurrent: 2
+  timeout: 60
+  providers:
+    g_eval: "openai"
+    selfcheck: "openai"
+
+# Processing Configuration
+processing:
+  batch_size: 10
+  bypass_cache: false
+  bypass_cache_steps:
+    pdf_extraction: false
+    document_chunking: false
+    prompt_generation: true
+    response_generation: true
+    hallucination_detection: true
+  show_progress: true
+  verbose: false
+
+# Output Configuration
+output:
+  directory: "output/dodhalueval_results"
+  format: "halueval"
+  generate_report: true
+  save_intermediate: true

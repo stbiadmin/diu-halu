@@ -228,8 +228,12 @@ class DoDHaluEvalPipeline:
         else:
             self.llm_generator = None
         
-        # Response Generator
-        self.response_generator = ResponseGenerator(self.providers)
+        # Response Generator with generation config
+        response_config = self.config.get('response_generation', {})
+        self.response_generator = ResponseGenerator(
+            self.providers,
+            generation_config=response_config
+        )
         
         # Hallucination Detectors
         self.evaluators = self._initialize_evaluators()
@@ -385,7 +389,7 @@ class DoDHaluEvalPipeline:
         self._original_prompts = prompts  # Store for later use
         return prompts
     
-    async def _generate_responses_with_cache(self, prompts: List[Prompt]) -> List[Response]:
+    async def _generate_responses_with_cache(self, prompts: List[Prompt], chunks: List[DocumentChunk] = None) -> List[Response]:
         """Generate responses or load from cache."""
         cached_data = self._load_intermediate_if_exists("responses")
         if cached_data:
@@ -396,7 +400,7 @@ class DoDHaluEvalPipeline:
                 responses.append(response)
             logger.info(f"Loaded {len(responses)} responses from cache")
             return responses
-        return await self._generate_responses(prompts)
+        return await self._generate_responses(prompts, chunks)
     
     async def _detect_hallucinations_with_cache(self, responses: List[Response], prompts: List[Prompt]) -> List[Any]:
         """Detect hallucinations or load from cache."""
@@ -475,7 +479,7 @@ class DoDHaluEvalPipeline:
             prompts = await self._generate_prompts_with_cache(chunks)
             
             # Step 3: Generate responses (or load from cache)
-            responses = await self._generate_responses_with_cache(prompts)
+            responses = await self._generate_responses_with_cache(prompts, chunks)
             
             # Step 4: Detect hallucinations (or load from cache)
             evaluations = await self._detect_hallucinations_with_cache(responses, prompts)
@@ -627,10 +631,15 @@ class DoDHaluEvalPipeline:
                 for chunk in selected_chunks:
                     logger.info(f"Generating prompts from chunk with {len(chunk.content)} characters: {chunk.content[:100]}...")
                     try:
+                        # Calculate prompts per chunk to reach total target
+                        remaining_prompts = self.config["prompt_generation"]["num_prompts"] - len(all_prompts)
+                        chunks_remaining = len(selected_chunks) - selected_chunks.index(chunk)
+                        prompts_per_chunk = max(1, remaining_prompts // chunks_remaining)
+                        
                         llm_prompts = await self.llm_generator.generate_hallucination_prone_prompts(
                             source_content=chunk.content,
                             source_chunk=chunk,
-                            num_prompts=1  # Reduce to 1 per chunk for testing
+                            num_prompts=prompts_per_chunk
                         )
                         all_prompts.extend(llm_prompts)
                     except Exception as e:
@@ -720,11 +729,11 @@ class DoDHaluEvalPipeline:
                 source_chunk_id=getattr(chunk, 'id', f"chunk_{i}"),
                 generation_strategy="fallback_template",
                 hallucination_type=["factual", "contextual"][i % 2],  # Alternate hallucination types
-                template_name=f"fallback_{i % len(question_templates)}",
                 metadata={
                     "fallback_reason": "template_and_llm_generation_failed",
                     "source_chunk_index": chunk.chunk_index,
-                    "topic_extracted": topic
+                    "topic_extracted": topic,
+                    "template_name": f"fallback_{i % len(question_templates)}"
                 }
             )
             fallback_prompts.append(prompt)
@@ -737,14 +746,16 @@ class DoDHaluEvalPipeline:
                 source_chunk_id="fallback_basic",
                 generation_strategy="fallback_basic",
                 hallucination_type="factual",
-                template_name="basic_fallback",
-                metadata={"fallback_reason": "no_chunks_available"}
+                metadata={
+                    "fallback_reason": "no_chunks_available",
+                    "template_name": "basic_fallback"
+                }
             )
             fallback_prompts.append(basic_prompt)
         
         return fallback_prompts
     
-    async def _generate_responses(self, prompts: List[Prompt]) -> List[Response]:
+    async def _generate_responses(self, prompts: List[Prompt], chunks: List[DocumentChunk] = None) -> List[Response]:
         """Generate responses for prompts."""
         logger.info("\n" + "=" * 50)
         logger.info("STEP 3: Generating Responses")
@@ -752,12 +763,14 @@ class DoDHaluEvalPipeline:
         
         # Build document store for context-aware response generation
         # Pass the chunks we just processed to ensure context is available
-        document_store = self._build_document_store(prompts, getattr(self, '_current_chunks', None))
+        document_store = self._build_document_store(prompts, chunks)
         
-        # Create context-aware response generator
+        # Create context-aware response generator with generation config
+        response_config = self.config.get('response_generation', {})
         context_response_generator = ResponseGenerator(
             providers=self.providers, 
-            document_store=document_store
+            document_store=document_store,
+            generation_config=response_config
         )
         
         providers_to_use = []
@@ -770,7 +783,8 @@ class DoDHaluEvalPipeline:
         responses = await context_response_generator.generate_responses(
             prompts=prompts,
             models=providers_to_use,
-            hallucination_rate=self.config["response_generation"]["hallucination_rate"]
+            hallucination_rate=self.config["response_generation"]["hallucination_rate"],
+            chunks=chunks
         )
         
         self.stats["responses_generated"] = len(responses)

@@ -1,6 +1,6 @@
 """Configuration models for DoDHaluEval."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Literal
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
@@ -85,6 +85,105 @@ class PromptGenerationConfig(BaseModel):
         return v
 
 
+class DoDHaluEvalSettings(BaseModel):
+    """Settings for DoDHaluEval method."""
+    
+    hallucination_rate: float = Field(default=0.3, ge=0.0, le=1.0)
+    injection_strategies: List[str] = Field(
+        default_factory=lambda: ['factual', 'logical', 'context']
+    )
+    system_prompt_strategy: str = Field(default='hallucination_prone')
+    post_processing_injection: bool = Field(default=True)
+    
+    @field_validator('injection_strategies')
+    @classmethod
+    def validate_injection_strategies(cls, v: List[str]) -> List[str]:
+        """Validate injection strategies."""
+        supported = {'factual', 'logical', 'context'}
+        invalid = set(v) - supported
+        if invalid:
+            raise ValueError(f'Invalid injection strategies: {invalid}. Supported: {supported}')
+        return v
+
+
+class HaluEvalSettings(BaseModel):
+    """Settings for HaluEval method."""
+    
+    use_two_stage_generation: bool = Field(default=True)
+    enable_filtering: bool = Field(default=True)
+    hallucination_patterns: List[str] = Field(
+        default_factory=lambda: [
+            'factual_contradiction',
+            'context_misunderstanding', 
+            'specificity_mismatch',
+            'invalid_inference'
+        ]
+    )
+    template_file: str = Field(default='data/prompts/halueval_templates.yaml')
+    max_knowledge_length: int = Field(default=500, ge=100, le=2000)
+    
+    @field_validator('hallucination_patterns')
+    @classmethod
+    def validate_hallucination_patterns(cls, v: List[str]) -> List[str]:
+        """Validate hallucination patterns."""
+        supported = {
+            'factual_contradiction',
+            'context_misunderstanding',
+            'specificity_mismatch', 
+            'invalid_inference',
+            'equipment_substitution',
+            'branch_confusion',
+            'temporal_confusion'
+        }
+        invalid = set(v) - supported
+        if invalid:
+            raise ValueError(f'Invalid hallucination patterns: {invalid}. Supported: {supported}')
+        return v
+
+
+class HybridSettings(BaseModel):
+    """Settings for Hybrid method."""
+    
+    primary_method: Literal['dodhalueval', 'halueval'] = Field(default='dodhalueval')
+    fallback_method: Literal['dodhalueval', 'halueval'] = Field(default='halueval')
+    comparison_mode: bool = Field(default=False)
+    selection_criteria: str = Field(default='confidence_score')
+    
+    @field_validator('primary_method', 'fallback_method')
+    @classmethod
+    def validate_methods(cls, v: str) -> str:
+        """Validate method names."""
+        if v not in ['dodhalueval', 'halueval']:
+            raise ValueError(f'Method must be "dodhalueval" or "halueval", got: {v}')
+        return v
+
+
+class ResponseGenerationConfig(BaseModel):
+    """Configuration for response generation."""
+    
+    generation_method: Literal['dodhalueval', 'halueval', 'hybrid'] = Field(default='dodhalueval')
+    dodhalueval_settings: DoDHaluEvalSettings = Field(default_factory=DoDHaluEvalSettings)
+    halueval_settings: HaluEvalSettings = Field(default_factory=HaluEvalSettings)
+    hybrid_settings: HybridSettings = Field(default_factory=HybridSettings)
+    
+    # Existing response generation settings
+    providers: List[str] = Field(default_factory=lambda: ['openai', 'fireworks'])
+    models: Dict[str, str] = Field(default_factory=lambda: {
+        'openai': 'gpt-4',
+        'fireworks': 'accounts/fireworks/models/llama-v3p1-70b-instruct'
+    })
+    timeout: int = Field(default=30, ge=5, le=300)
+    max_concurrent: int = Field(default=5, ge=1, le=20)
+    
+    @field_validator('generation_method')
+    @classmethod
+    def validate_generation_method(cls, v: str) -> str:
+        """Validate generation method."""
+        if v not in ['dodhalueval', 'halueval', 'hybrid']:
+            raise ValueError(f'Generation method must be one of: dodhalueval, halueval, hybrid. Got: {v}')
+        return v
+
+
 class OutputConfig(BaseModel):
     """Configuration for output generation."""
     
@@ -142,6 +241,7 @@ class DoDHaluEvalConfig(BaseModel):
     api_configs: Dict[str, APIConfig] = Field(default_factory=dict)
     evaluation_methods: List[EvaluationConfig] = Field(default_factory=list)
     prompt_generation: PromptGenerationConfig = Field(default_factory=PromptGenerationConfig)
+    response_generation: ResponseGenerationConfig = Field(default_factory=ResponseGenerationConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
