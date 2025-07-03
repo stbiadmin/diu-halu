@@ -1,27 +1,33 @@
 # Usage Guide
 
-This comprehensive guide demonstrates how to use DoDHaluEval for creating and evaluating hallucination benchmarks in the Department of Defense knowledge domain.
+This comprehensive guide demonstrates how to use DoDHaluEval for creating and evaluating hallucination benchmarks in the Department of Defense knowledge domain using multiple generation methodologies.
 
 ## Quick Start
 
-### Basic Pipeline Execution
+### Basic Pipeline Execution with Method Selection
 
-The simplest way to run the complete pipeline:
+Run the complete pipeline with configurable generation methodology:
 
 ```bash
+# Run with HaluEval methodology
+python scripts/run_pipeline.py --config configs/halueval_method.yaml
+
+# Run with original DoDHaluEval methodology
+python scripts/run_pipeline.py --config configs/dodhalueval_method.yaml
+
+# Run with hybrid approach
+python scripts/run_pipeline.py --config configs/hybrid_method.yaml
+
 # Run with default configuration
 python scripts/run_pipeline.py
 
-# Run with custom configuration
-python scripts/run_pipeline.py --config configs/custom_pipeline.yaml
-
 # Run with specific output directory
-python scripts/run_pipeline.py --output output/my_experiment/
+python scripts/run_pipeline.py --config configs/halueval_method.yaml --output output/halueval_experiment/
 ```
 
 ### CLI Commands
 
-DoDHaluEval provides a comprehensive command-line interface:
+DoDHaluEval provides a comprehensive command-line interface with generation method support:
 
 ```bash
 # Show available commands
@@ -33,14 +39,21 @@ dodhalueval process-docs --input data/CSC/ --output data/processed/
 # Generate prompts
 dodhalueval generate-prompts --input data/processed/ --output data/prompts/ --count 1000
 
-# Generate responses  
-dodhalueval generate-responses --input data/prompts/ --output data/responses/ --provider openai
+# Generate responses with method selection
+dodhalueval generate-responses --input data/prompts/ --output data/responses/ --provider openai --generation-method halueval
+
+# Generate responses with hybrid method
+dodhalueval generate-responses --input data/prompts/ --output data/responses/ --provider openai --generation-method hybrid --primary-method halueval --fallback-method dodhalueval
 
 # Evaluate responses
-dodhalueval evaluate --input data/responses/ --output data/evaluations/ --methods hhem,g_eval
+dodhalueval evaluate --input data/responses/ --output data/evaluations/ --methods hhem,g_eval,selfcheck
 
-# Build final dataset
-dodhalueval build-dataset --input data/evaluations/ --output benchmark_v1.jsonl
+# Build final dataset with HaluEval compatibility
+dodhalueval build-dataset --input data/evaluations/ --output benchmark_v1.jsonl --format halueval
+
+# Validate configuration and methods
+dodhalueval validate-config --config configs/halueval_method.yaml
+dodhalueval test-methods --config configs/hybrid_method.yaml
 ```
 
 ## Pipeline Components

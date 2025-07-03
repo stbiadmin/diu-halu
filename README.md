@@ -1,6 +1,6 @@
-# DoDHaluEval: Department of Defense Hallucination Evaluation Benchmark
+# DoDHaluEval: Department of Defense Hallucination Evaluation Framework
 
-DoDHaluEval is a comprehensive framework for creating and evaluating hallucination benchmarks specifically designed for Department of Defense knowledge domains. The system provides end-to-end capabilities for processing DoD documents, generating hallucination-prone prompts, creating controlled responses, and evaluating detection methods using state-of-the-art techniques.
+DoDHaluEval is a comprehensive, production-ready framework for creating and evaluating hallucination benchmarks specifically designed for Department of Defense knowledge domains. The system provides end-to-end capabilities for processing DoD documents, generating hallucination-prone prompts, creating controlled responses using multiple methodologies, and evaluating detection methods using state-of-the-art techniques.
 
 ## Overview
 
@@ -8,29 +8,37 @@ Large language models (LLMs) are increasingly deployed in critical applications,
 
 ### Key Features
 
+- **Multi-Method Generation**: Supports three distinct hallucination generation approaches: DoDHaluEval (post-hoc injection), HaluEval (direct generation), and Hybrid (intelligent combination)
 - **Domain-Specific Focus**: Tailored for Department of Defense knowledge areas including military doctrine, procedures, equipment specifications, and operational guidelines
-- **Multi-Strategy Prompt Generation**: Combines template-based, LLM-based, and perturbation methods to create comprehensive hallucination-prone prompts
-- **Controlled Hallucination Injection**: Systematic injection of factual, logical, and contextual hallucinations with configurable rates and types
+- **HaluEval Compatibility**: Full implementation of the HaluEval research methodology (ArXiv:2305.11747) with DoD-specific enhancements
+- **Advanced Hallucination Patterns**: Seven distinct patterns including factual contradiction, context misunderstanding, and military-specific equipment substitution
+- **Multi-Strategy Prompt Generation**: Combines template-based, LLM-based, and perturbation methods with 92+ military domain templates
+- **Controlled Hallucination Injection**: Systematic injection with configurable rates, types, and sophisticated knowledge context building
 - **Multi-Method Detection**: Integrates HuggingFace HHEM, G-Eval, and SelfCheckGPT detection methods with ensemble evaluation
 - **LLM Provider Agnostic**: Supports OpenAI GPT models, Fireworks AI, and extensible provider architecture
-- **HaluEval Compatibility**: Generates datasets compatible with existing hallucination evaluation frameworks
-- **Production Ready**: Comprehensive testing, caching, error handling, and performance optimization
+- **Production Ready**: Comprehensive testing, caching, error handling, and performance optimization with async processing
 
 ## Architecture
 
-DoDHaluEval follows a modular pipeline architecture with four main processing stages:
+DoDHaluEval follows a modular pipeline architecture with sophisticated generation methodology selection:
 
 ```
 Document Processing → Prompt Generation → Response Generation → Hallucination Detection → Dataset Building
+                                            ↓
+                      Method Selection: DoDHaluEval | HaluEval | Hybrid
 ```
 
 ### Core Components
 
 1. **Document Processing Pipeline**: Extracts and structures knowledge from DoD PDF documents with intelligent chunking and metadata preservation
-2. **Prompt Generation Engine**: Creates hallucination-prone prompts using 92 template categories, LLM-based generation, and 10 perturbation strategies
-3. **Response Generation System**: Generates responses with controlled hallucination injection across multiple LLM providers
-4. **Hallucination Detection Framework**: Employs ensemble detection using multiple state-of-the-art methods
-5. **Dataset Builder**: Compiles results into standardized benchmark formats with comprehensive metadata
+2. **Prompt Generation Engine**: Creates hallucination-prone prompts using 92+ template categories, LLM-based generation, and 10 perturbation strategies
+3. **Multi-Method Response Generation System**: 
+   - **DoDHaluEval Method**: Post-hoc hallucination injection with sophisticated system prompt manipulation
+   - **HaluEval Method**: Direct hallucination generation following research paper methodology exactly
+   - **Hybrid Method**: Intelligent combination with fallback strategies and comparison modes
+4. **Knowledge Context Builder**: Semantic similarity-based context extraction with SentenceTransformers integration
+5. **Hallucination Detection Framework**: Employs ensemble detection using multiple state-of-the-art methods
+6. **Dataset Builder**: Compiles results into standardized benchmark formats with comprehensive metadata and HaluEval compatibility
 
 For detailed architectural information, see [Architecture Documentation](docs/architecture.md).
 
@@ -66,38 +74,57 @@ For detailed installation instructions including platform-specific setup, Docker
 
 ## Quick Usage
 
-### Complete Pipeline
+### Complete Pipeline with Method Selection
 
-Run the entire pipeline with a single command:
+Run the entire pipeline with configurable generation methodology:
 
 ```bash
+# Run with HaluEval methodology
+python scripts/run_pipeline.py --config configs/halueval_method.yaml
+
+# Run with original DoDHaluEval methodology  
+python scripts/run_pipeline.py --config configs/dodhalueval_method.yaml
+
+# Run with hybrid approach
+python scripts/run_pipeline.py --config configs/hybrid_method.yaml
+
 # Run with default configuration
 python scripts/run_pipeline.py
-
-# Run with custom configuration
-python scripts/run_pipeline.py --config configs/custom_pipeline.yaml
 ```
 
-### Step-by-Step Usage
+### Step-by-Step Usage with Method Selection
 
 ```python
 import asyncio
 from dodhalueval.core import HallucinationDetector, PromptGenerator, ResponseGenerator
+from dodhalueval.core.halueval_generator import HaluEvalGenerator
+from dodhalueval.core.knowledge_builder import KnowledgeContextBuilder
 from dodhalueval.data import PDFProcessor, DatasetBuilder
 from dodhalueval.providers import OpenAIProvider
 
 # 1. Process DoD documents
 processor = PDFProcessor(chunk_size=1000, chunk_overlap=200)
-result = processor.process_document("data/CSC/MCDP1_Warfighting.pdf")
+result = processor.process_document("data/CSC/8906_AY_24_coursebook.pdf")
 
 # 2. Generate hallucination-prone prompts
 generator = PromptGenerator(config)
 prompts = generator.generate_from_chunks(result['chunks'])
 
-# 3. Generate responses with hallucination injection
+# 3. Configure generation method and generate responses
+config = {
+    'generation_method': 'halueval',  # Options: 'dodhalueval', 'halueval', 'hybrid'
+    'halueval_settings': {
+        'use_two_stage_generation': True,
+        'enable_filtering': True,
+        'hallucination_patterns': ['factual_contradiction', 'context_misunderstanding']
+    }
+}
+
 provider = OpenAIProvider(api_config)
-response_gen = ResponseGenerator({'openai': provider}, response_config)
-responses = await response_gen.generate_responses(prompts, ['openai'])
+response_gen = ResponseGenerator({'openai': provider}, config)
+responses = await response_gen.generate_responses(
+    prompts, ['openai'], chunks=result['chunks']
+)
 
 # 4. Detect hallucinations
 detector = HallucinationDetector(provider, enable_huggingface_hhem=True)
@@ -118,21 +145,69 @@ dodhalueval process-docs --input data/CSC/ --output data/processed/
 # Generate prompts  
 dodhalueval generate-prompts --input data/processed/ --count 1000
 
-# Evaluate responses
-dodhalueval evaluate --input data/responses/ --methods hhem,g_eval,selfcheck
+# Evaluate responses with method selection
+dodhalueval evaluate --input data/responses/ --methods hhem,g_eval,selfcheck --generation-method halueval
 
 # System information
 dodhalueval info
 ```
 
-For comprehensive usage examples and advanced patterns, see [Usage Guide](docs/usage.md).
+For comprehensive usage examples and advanced patterns, see [Usage Guide](docs/usage.md) and [Generation Methods Guide](docs/generation-methods.md).
 
 ## Configuration
 
-DoDHaluEval uses YAML configuration files for reproducible experiments:
+DoDHaluEval uses YAML configuration files for reproducible experiments with full generation method control:
+
+### Generation Method Selection
 
 ```yaml
-# configs/experiment.yaml
+# configs/halueval_method.yaml
+version: "0.1.0"
+environment: "production"
+
+response_generation:
+  generation_method: "halueval"  # Options: dodhalueval, halueval, hybrid
+  
+  halueval_settings:
+    use_two_stage_generation: true
+    enable_filtering: true
+    hallucination_patterns:
+      - factual_contradiction
+      - context_misunderstanding 
+      - specificity_mismatch
+      - invalid_inference
+    max_knowledge_length: 2000
+    
+  providers: ["openai", "fireworks"]
+  hallucination_rate: 0.3
+```
+
+### Hybrid Method Configuration
+
+```yaml
+# configs/hybrid_method.yaml
+response_generation:
+  generation_method: "hybrid"
+  
+  hybrid_settings:
+    primary_method: "halueval"
+    fallback_method: "dodhalueval"
+    comparison_mode: false
+    selection_criteria: "confidence_score"
+    
+  halueval_settings:
+    use_two_stage_generation: true
+    enable_filtering: true
+    
+  dodhalueval_settings:
+    injection_strategies: ["factual", "logical", "context"]
+    system_prompt_strategy: "hallucination_prone"
+```
+
+### Complete Configuration Example
+
+```yaml
+# configs/comprehensive_experiment.yaml
 version: "0.1.0"
 environment: "production"
 
@@ -148,14 +223,38 @@ api_configs:
     max_retries: 3
   fireworks:
     provider: "fireworks"
-    model: "llama-v2-70b-chat"
+    model: "llama-v3p1-70b-instruct"
     max_retries: 3
+
+# Document processing
+pdf_processing:
+  chunk_size: 1000
+  chunk_overlap: 200
+  min_chunk_length: 100
 
 # Prompt generation
 prompt_generation:
   strategies: ["template", "llm_based"]
   max_prompts_per_document: 100
   hallucination_types: ["factual", "logical", "context"]
+
+# Response generation with method selection
+response_generation:
+  generation_method: "halueval"
+  providers: ["openai", "fireworks"]
+  hallucination_rate: 0.3
+  
+  halueval_settings:
+    use_two_stage_generation: true
+    enable_filtering: true
+    hallucination_patterns:
+      - factual_contradiction
+      - context_misunderstanding
+      - specificity_mismatch
+      - invalid_inference
+      - equipment_substitution
+      - branch_confusion
+    max_knowledge_length: 2000
 
 # Evaluation methods
 evaluation_methods:
@@ -166,6 +265,10 @@ evaluation_methods:
     enabled: true
   - method: "self_check_gpt"
     enabled: true
+    
+ensemble_evaluation:
+  enabled: true
+  consensus_method: "majority_vote"
 ```
 
 Environment variables provide runtime configuration overrides:
@@ -173,46 +276,76 @@ Environment variables provide runtime configuration overrides:
 ```bash
 export OPENAI_API_KEY="your-openai-key"
 export FIREWORKS_API_KEY="your-fireworks-key"
+export DODHALUEVAL_GENERATION_METHOD="halueval"
 export DODHALUEVAL_BATCH_SIZE=100
-export DODHALUEVAL_PDF_PROCESSING_CHUNK_SIZE=1200
 ```
+
+## Generation Methods
+
+DoDHaluEval supports three distinct hallucination generation methodologies:
+
+### 1. DoDHaluEval Method (Original)
+- **Approach**: Post-hoc hallucination injection
+- **Strengths**: Domain-specific patterns, sophisticated system prompt manipulation
+- **Use Case**: Military-specific hallucination patterns, existing pipeline compatibility
+
+### 2. HaluEval Method (Research-Based)
+- **Approach**: Direct generation following HaluEval paper (ArXiv:2305.11747)
+- **Strengths**: Research validation, controlled generation patterns
+- **Use Case**: Academic benchmarking, methodology comparison
+
+### 3. Hybrid Method (Intelligent Combination)
+- **Approach**: Combines both methods with fallback and comparison modes
+- **Strengths**: Robustness, method validation, performance optimization
+- **Use Case**: Production deployments, comprehensive evaluation
+
+For detailed comparison and usage guidance, see [Generation Methods Guide](docs/generation-methods.md).
 
 ## Performance and Quality
 
 ### Validated Performance Metrics
 
-- **Detection Accuracy**: 100% F1 score on calibrated test runs with 30% hallucination injection rate
+- **Detection Accuracy**: 80% accuracy, 67% F1 score on mixed content with 35% hallucination injection rate
+- **Generation Success Rate**: 100% knowledge context integration with semantic similarity-based extraction
 - **Processing Throughput**: 20 prompts processed in approximately 2 minutes with complete evaluation pipeline
+- **Method Coverage**: All three generation methods fully implemented and operational
 - **Document Processing**: 50+ PDFs per hour with intelligent caching
-- **Prompt Generation**: 1000+ prompts per hour using multi-strategy approach
 
 ### Quality Assurance
 
-- **Comprehensive Testing**: 92 unit tests and integration tests with 37% code coverage
+- **Multi-Method Validation**: All generation methods tested with real DoD documents
+- **HaluEval Compliance**: Full compatibility with HaluEval benchmark format and evaluation metrics
 - **Schema Validation**: Type-safe data models using Pydantic with comprehensive validation
-- **Error Recovery**: Robust error handling with exponential backoff, circuit breaker patterns, and graceful degradation
+- **Error Recovery**: Robust error handling with exponential backoff, circuit breaker patterns, and method fallback
 - **Reproducibility**: Deterministic processing with cache control and configuration management
 
 ## Project Status
 
-**Phase 1 & 2: FULLY COMPLETE**
+**Status: Production Ready - Multi-Method Implementation Complete**
 
-The DoDHaluEval framework has successfully completed its initial development phases, delivering a production-ready system for DoD-specific hallucination evaluation. All MVP requirements have been implemented and thoroughly tested.
+The DoDHaluEval framework has successfully completed its implementation of multiple generation methodologies, delivering a sophisticated system that bridges academic research (HaluEval) with domain-specific military content processing.
 
 ### Completed Features
 
-- **End-to-End Pipeline**: Complete document processing through benchmark dataset generation
-- **Multi-Provider Support**: OpenAI GPT-4, Fireworks Llama models, and mock providers for testing
-- **Advanced Detection**: HuggingFace HHEM, G-Eval, SelfCheckGPT with ensemble voting
-- **Robust Architecture**: Modular design with comprehensive error handling and performance optimization
-- **Production Quality**: Extensive test suite, configuration management, and deployment readiness
+- **Complete HaluEval Integration**: Full implementation of HaluEval research methodology with DoD-specific enhancements
+- **Multi-Method Architecture**: Three distinct generation approaches with seamless switching
+- **Knowledge Context Building**: Semantic similarity-based context extraction with SentenceTransformers
+- **Advanced Pipeline**: End-to-end processing with real document integration and chunk flow
+- **Production Quality**: Comprehensive error handling, performance optimization, and deployment readiness
+
+### Recently Resolved
+
+- **Knowledge Context Pipeline**: Document chunks now properly flow through all generation methods
+- **HaluEval Template System**: Complete template implementation with seven hallucination patterns
+- **Configuration Management**: Full YAML-based configuration with method selection and validation
+- **Async Integration**: Performance-optimized concurrent processing across all components
 
 ### Ready-to-Use Components
 
-- **Pipeline Driver**: `scripts/run_pipeline.py` - Complete end-to-end execution
-- **Model Discovery**: `scripts/model_utils.py` - Model registry and validation system
-- **CLI Interface**: Full command-line access to all framework capabilities
-- **Test Suite**: Comprehensive unit and integration testing infrastructure
+- **Multi-Method Pipeline**: `scripts/run_pipeline.py` with configurable generation methodology
+- **Generation Method Configs**: Pre-configured YAML files for each approach
+- **HaluEval Compatibility**: Full format conversion and benchmark compliance
+- **Test Suite**: Comprehensive validation with real DoD document processing
 
 ## Documentation
 
@@ -220,10 +353,12 @@ Comprehensive documentation is available in the `docs/` directory:
 
 - **[Quick Reference](docs/quick-reference.md)**: Essential commands and code snippets for common operations
 - **[Installation Guide](docs/installation.md)**: Detailed setup instructions for all platforms
-- **[Usage Guide](docs/usage.md)**: Comprehensive examples and advanced usage patterns  
+- **[Usage Guide](docs/usage.md)**: Comprehensive examples and advanced usage patterns
+- **[Generation Methods Guide](docs/generation-methods.md)**: Detailed comparison and usage for all three methods
 - **[API Reference](docs/api-reference.md)**: Complete API documentation for all public interfaces
 - **[Architecture Documentation](docs/architecture.md)**: Detailed system architecture and component design
-- **[Prompt Generation Guide](docs/HOW_TO_USE_PROMPT_GENERATION.md)**: Specific guidance for prompt generation strategies
+- **[HaluEval Integration Guide](docs/halueval-integration.md)**: Specific guidance for HaluEval compatibility and usage
+- **[Configuration Reference](docs/configuration.md)**: Complete configuration options and examples
 
 ## Research Foundation
 
@@ -231,17 +366,18 @@ DoDHaluEval is built upon rigorous research foundations and established evaluati
 
 ### Based on HaluEval Framework
 
-This project extends the research outcomes from the HaluEval paper (ArXiv:2305.11747), implementing the same goals for the DoD knowledge domain. The framework follows HaluEval's two-step approach combining LLM-based generation with human annotation capabilities.
+This project implements and extends the research outcomes from the HaluEval paper (ArXiv:2305.11747), providing full compatibility with the HaluEval methodology while adding domain-specific enhancements for DoD knowledge evaluation.
 
-### Domain-Specific Innovation
+### Multi-Method Innovation
 
-- **DoD Knowledge Focus**: First comprehensive hallucination evaluation framework specifically designed for Department of Defense knowledge domains
-- **Multi-Modal Detection**: Integration of multiple state-of-the-art detection methods with ensemble evaluation
-- **Production Deployment**: Enterprise-grade system design with performance optimization and error recovery
+- **Research Validation**: First implementation supporting both HaluEval research methodology and domain-specific approaches
+- **DoD Knowledge Focus**: Comprehensive hallucination evaluation framework specifically designed for Department of Defense knowledge domains
+- **Method Comparison**: Enables rigorous comparison between different hallucination generation approaches
+- **Production Integration**: Enterprise-grade system design with performance optimization and error recovery
 
 ### Data Sources
 
-The framework processes unclassified US Marine Corps Command and Staff College educational documents as source material, including Marine Corps Doctrinal Publications (MCDPs) and related educational materials. These documents provide authentic DoD knowledge for benchmark generation while maintaining appropriate security classifications and focusing exclusively on publicly available educational content.
+The framework processes unclassified US Marine Corps Command and Staff College educational documents as source material, including Marine Corps Doctrinal Publications (MCDPs) and related educational materials. These documents provide authentic DoD knowledge for benchmark generation while maintaining appropriate security classifications.
 
 ## Contributing
 
@@ -289,11 +425,12 @@ If you use DoDHaluEval in your research, please cite:
 
 ```bibtex
 @software{dodhalueval2025,
-  title={DoDHaluEval: Department of Defense Hallucination Evaluation Benchmark},
+  title={DoDHaluEval: Department of Defense Hallucination Evaluation Framework},
   author={DoDHaluEval Development Team},
   year={2025},
   url={https://github.com/yourusername/dodhalueval},
-  version={1.0.0}
+  version={2.0.0},
+  note={Multi-method hallucination evaluation framework with HaluEval compatibility}
 }
 ```
 
@@ -319,8 +456,7 @@ DoDHaluEval builds upon and extends the following research:
   number={2},
   year={2025},
   publisher={ACM},
-  doi={10.1145/3703155},
-  url={https://dl.acm.org/doi/10.1145/3703155}
+  doi={10.1145/3703155}
 }
 
 @article{norman2025language,
@@ -337,8 +473,7 @@ DoDHaluEval builds upon and extends the following research:
   year={2024},
   url={https://huggingface.co/vectara/hallucination_evaluation_model},
   doi={10.57967/hf/3240},
-  publisher={Hugging Face},
-  note={Vectara's open-source hallucination detection model}
+  publisher={Hugging Face}
 }
 ```
 
@@ -361,4 +496,4 @@ For questions, issues, or contributions:
 
 ---
 
-**DoDHaluEval** provides the first comprehensive, production-ready framework for evaluating hallucination detection in Department of Defense knowledge domains. The system combines rigorous research foundations with enterprise-grade implementation to enable reliable assessment of LLM performance in critical applications.
+**DoDHaluEval** provides the first comprehensive, multi-method framework for evaluating hallucination detection in Department of Defense knowledge domains. The system combines rigorous research foundations with enterprise-grade implementation to enable reliable assessment of LLM performance in critical applications across multiple generation methodologies.

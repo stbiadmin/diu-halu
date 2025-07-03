@@ -1,10 +1,10 @@
 # DoDHaluEval Architecture
 
-This document provides a comprehensive overview of the DoDHaluEval system architecture, component interactions, and design principles.
+This document provides a comprehensive overview of the DoDHaluEval system architecture, component interactions, and design principles including the multi-method generation capabilities.
 
 ## System Overview
 
-DoDHaluEval is a modular hallucination evaluation framework designed to create domain-specific benchmarks for Department of Defense knowledge areas. The system follows a pipeline architecture with four main processing stages and supporting infrastructure components.
+DoDHaluEval is a modular hallucination evaluation framework designed to create domain-specific benchmarks for Department of Defense knowledge areas. The system follows a pipeline architecture with four main processing stages, three distinct generation methodologies, and supporting infrastructure components.
 
 ## Architecture Diagram
 
@@ -16,9 +16,17 @@ DoDHaluEval is a modular hallucination evaluation framework designed to create d
          │                       │                       │                       │
          ▼                       ▼                       ▼                       ▼
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Structured     │    │  Hallucination  │    │   Controlled    │    │   Benchmark     │
+│  Structured     │    │  Hallucination  │    │   Multi-Method  │    │   Benchmark     │
 │   Knowledge     │    │ Prone Prompts   │    │   Responses     │    │    Dataset      │
 └─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+                                                        ▼
+                                              ┌─────────────────┐
+                                              │ Method Selection│
+                                              │ DoDHaluEval |   │
+                                              │ HaluEval |      │
+                                              │ Hybrid          │
+                                              └─────────────────┘
 ```
 
 ## Core Components
@@ -77,28 +85,58 @@ The prompt generation engine creates hallucination-prone prompts using multiple 
 - Scoring system (0.0-1.0) for prompt quality
 - Filtering mechanisms for high-quality outputs
 
-### 3. Response Generation System
+### 3. Multi-Method Response Generation System
 
 **Location**: `src/dodhalueval/core/response_generator.py`
 
-The response generation system creates responses with controlled hallucination injection.
+The response generation system supports three distinct hallucination generation methodologies with seamless switching and intelligent fallback capabilities.
+
+#### Generation Methods:
+
+**1. DoDHaluEval Method (Original)**:
+- Post-hoc hallucination injection approach
+- System prompt manipulation for hallucination-prone responses
+- Domain-specific patterns: equipment substitution, branch confusion, temporal confusion
+- Multi-stage pipeline: prompt → system prompt → response → post-processing injection
+
+**2. HaluEval Method (Research-Based)**:
+- Direct generation following HaluEval paper methodology (ArXiv:2305.11747)
+- Structured instruction design with knowledge-question-answer format
+- Seven hallucination patterns: factual contradiction, context misunderstanding, specificity mismatch, invalid inference, plus DoD-specific extensions
+- Two-stage generation: one-pass + conversational schema with filtering
+
+**3. Hybrid Method (Intelligent Combination)**:
+- Combines both methods with configurable primary/fallback strategy
+- Comparison mode: generates with both methods and selects best response
+- Adaptive selection based on content type, confidence scores, or custom criteria
+- Performance optimization with timeout and caching mechanisms
 
 #### LLM Provider Support:
-- **OpenAI**: GPT-4, GPT-3.5-turbo integration
-- **Fireworks AI**: Llama-2, Mixtral, custom models
-- **Mock Provider**: Testing and development support
+- **OpenAI**: GPT-4, GPT-3.5-turbo integration with full async support
+- **Fireworks AI**: Llama-v3p1-70b-instruct, Mixtral models
+- **Mock Provider**: Testing and development support with configurable behavior
 
-#### Hallucination Injection:
-- Configurable injection rates (default: 30%)
-- Type-specific injection: factual, logical, contextual
-- Prompt engineering for hallucination-inducing responses
-- Document context propagation for grounded responses
+#### Knowledge Context Building:
+**Location**: `src/dodhalueval/core/knowledge_builder.py`
+- Semantic similarity-based context extraction using SentenceTransformers
+- Multi-chunk knowledge combination with relevance scoring
+- Quality filtering and content truncation
+- Fallback to text-based similarity when embeddings unavailable
+
+#### HaluEval Generator:
+**Location**: `src/dodhalueval/core/halueval_generator.py`
+- Complete implementation of HaluEval research methodology
+- Template-based prompt construction with pattern-specific demonstrations
+- Two-stage generation with filtering for optimal hallucination selection
+- Async and sync generation methods for pipeline compatibility
 
 #### Features:
-- Batch processing with configurable concurrency
-- Rate limiting and retry logic
-- Response cleaning and normalization
-- Metadata preservation and traceability
+- Method selection through configuration with runtime switching
+- Batch processing with configurable concurrency across all methods
+- Rate limiting and retry logic with provider-specific parameters
+- Response cleaning and normalization with method-specific processing
+- Comprehensive metadata preservation and traceability
+- Chunk-aware generation with document context integration
 
 ### 4. Hallucination Detection Framework
 
@@ -226,6 +264,38 @@ Comprehensive validation system for data integrity and quality assurance.
 - Content quality assessment
 - Domain-specific validation rules
 - Validation reporting and suggestions
+
+### HaluEval Compatibility Layer
+
+**Location**: `src/dodhalueval/evaluation/halueval_compatibility.py`
+
+Complete compatibility system for HaluEval benchmark format and academic research integration.
+
+#### Key Components:
+
+**Format Conversion**:
+- Bidirectional conversion between DoDHaluEval and HaluEval formats
+- Schema validation and compliance checking
+- Metadata preservation and enrichment
+- Export functionality for multiple academic formats
+
+**Validation System**:
+- HaluEval schema compliance verification
+- Dataset quality metrics calculation
+- Pattern distribution analysis
+- Academic publication readiness assessment
+
+**Research Integration**:
+- Methodology validation against HaluEval paper specifications
+- Performance benchmarking with original results
+- Pattern extension for domain-specific evaluation
+- Publication-ready dataset generation
+
+**Features**:
+- Complete HaluEval methodology implementation
+- Academic benchmark compatibility
+- Research validation and comparison tools
+- Extended pattern support for military domains
 
 ## CLI Interface
 
