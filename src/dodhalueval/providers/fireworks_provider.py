@@ -27,6 +27,9 @@ from dodhalueval.providers.base import (
 )
 from dodhalueval.models.config import APIConfig
 from dodhalueval.models.model_registry import get_model_registry
+from dodhalueval.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class FireworksProvider(BaseLLMProvider):

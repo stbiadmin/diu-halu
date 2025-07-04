@@ -1,0 +1,34 @@
+[run]
+source = src/dodhalueval
+branch = True
+parallel = True
+omit = 
+    */tests/*
+    */conftest.py
+    */__pycache__/*
+    */venv/*
+    */.venv/*
+    */site-packages/*
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstract
+    @abstractmethod
+    except ImportError:
+    # Debug-only code
+    def __str__
+    
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

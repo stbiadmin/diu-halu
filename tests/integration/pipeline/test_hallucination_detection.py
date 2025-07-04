@@ -14,6 +14,7 @@ import sys
 import os
 import json
 import csv
+import pytest
 from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
@@ -179,6 +180,7 @@ def save_evaluation_results(results, filename: str):
     return filepath
 
 
+@pytest.mark.asyncio
 async def test_huggingface_hhem_evaluator():
     """Test HuggingFace HHEM evaluator."""
     print("\n🤗 Testing HuggingFace HHEM Evaluator")
@@ -231,6 +233,7 @@ async def test_huggingface_hhem_evaluator():
         traceback.print_exc()
 
 
+@pytest.mark.asyncio
 async def test_g_eval_evaluator():
     """Test G-Eval evaluator."""
     print("\n🤖 Testing G-Eval Evaluator")
@@ -296,6 +299,7 @@ async def test_g_eval_evaluator():
     await evaluator.cleanup()
 
 
+@pytest.mark.asyncio
 async def test_selfcheck_evaluator():
     """Test SelfCheckGPT evaluator."""
     print("\n🔄 Testing SelfCheckGPT Evaluator")
@@ -337,6 +341,7 @@ async def test_selfcheck_evaluator():
     await evaluator.cleanup()
 
 
+@pytest.mark.asyncio
 async def test_ensemble_detector():
     """Test the ensemble hallucination detector."""
     print("\n🎯 Testing Ensemble Hallucination Detector")
@@ -417,6 +422,7 @@ async def test_ensemble_detector():
     await detector.cleanup()
 
 
+@pytest.mark.asyncio
 async def test_integration_with_response_generator():
     """Test integration between response generator and hallucination detection."""
     print("\n🔗 Testing Integration: Response Generation + Hallucination Detection")

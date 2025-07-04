@@ -11,6 +11,7 @@ import sys
 import os
 import json
 import csv
+import pytest
 from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
@@ -191,6 +192,7 @@ def setup_providers() -> Dict[str, Any]:
     return providers
 
 
+@pytest.mark.asyncio
 async def test_hallucination_injector():
     """Test the hallucination injection functionality."""
     print("\n🔬 Testing Hallucination Injector")
@@ -240,6 +242,7 @@ async def test_hallucination_injector():
         print(f"   {context_result.strip()}")
 
 
+@pytest.mark.asyncio
 async def test_response_generation():
     """Test basic response generation."""
     print("\n🤖 Testing Response Generation")
@@ -316,6 +319,7 @@ async def test_response_generation():
     await generator.cleanup()
 
 
+@pytest.mark.asyncio
 async def test_batch_with_progress():
     """Test batch generation with progress callback."""
     print("\n📊 Testing Batch Generation with Progress")
@@ -355,6 +359,7 @@ async def test_batch_with_progress():
     await generator.cleanup()
 
 
+@pytest.mark.asyncio
 async def test_multi_provider():
     """Test generation across multiple providers."""
     print("\n🌐 Testing Multi-Provider Generation")

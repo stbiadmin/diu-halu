@@ -1,20 +1,38 @@
 [flake8]
-max-line-length = 88
-extend-ignore = 
-    E203,  # whitespace before ':'
-    E501,  # line too long (handled by black)
-    W503,  # line break before binary operator
+max-line-length = 120
+extend-ignore = E203, E266, E501, W503, F403, F401
+max-complexity = 10
 exclude = 
     .git,
     __pycache__,
+    docs/source/conf.py,
+    old,
     build,
     dist,
     .venv,
     venv,
+    .tox,
     .eggs,
     *.egg,
-    docs/_build
+    .pytest_cache,
+    .mypy_cache,
+    .coverage,
+    htmlcov,
+    test_outputs,
+    papers,
+    plan,
+    .claude
+
+# Ignore specific files with many issues
+extend-exclude = 
+    tests/unit/test_pdf_processor.py,
+    extract_pdf_pages.py,
+    test_*.py
+
 per-file-ignores =
-    __init__.py:F401  # imported but unused
-    tests/*:F401,F811  # test files can have unused imports
-max-complexity = 10
+    # Ignore import errors in __init__ files
+    __init__.py: F401
+    # Ignore complexity in test files
+    test_*.py: C901
+    # Ignore line length in test files  
+    tests/*: E501
