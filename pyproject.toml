@@ -41,11 +41,15 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-cov",
+    "pytest-asyncio",
+    "pytest-mock",
     "black",
     "flake8",
     "mypy",
     "isort",
     "pre-commit",
+    "hypothesis",
+    "coverage[toml]",
 ]
 llm = [
     "openai>=1.0.0",
