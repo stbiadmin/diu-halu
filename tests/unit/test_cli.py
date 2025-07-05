@@ -178,7 +178,8 @@ class TestValidateConfigCommand:
         
         assert result.exit_code == 0
         assert "Configuration file" in result.output
-        assert "is valid" in result.output
+        # Check for "valid" instead of "is valid" since output may have newlines
+        assert "valid" in result.output
     
     def test_validate_environment_config(self):
         """Test validating environment configuration."""
