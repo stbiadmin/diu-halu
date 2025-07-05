@@ -56,6 +56,7 @@ dev = [
 llm = [
     "openai>=1.0.0",
     "transformers>=4.30.0",
+    "fireworks-ai>=0.9.0",
 ]
 
 [project.scripts]
