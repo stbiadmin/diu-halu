@@ -28,7 +28,7 @@ from datetime import datetime
 from collections import defaultdict
 
 import click
-from dotenv import load_dotenv
+# from dotenv import load_dotenv  # Removed for CI/CD compatibility
 
 # Add the src directory to the path so we can import dodhalueval
 script_dir = Path(__file__).parent
@@ -36,7 +36,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root / "src"))
 
 # Load environment variables
-load_dotenv(project_root / ".env")
+# load_dotenv(project_root / ".env")  # Removed for CI/CD compatibility
 
 from dodhalueval.data.pdf_processor import PDFProcessor
 from dodhalueval.core import (

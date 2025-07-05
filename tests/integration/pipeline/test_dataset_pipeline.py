@@ -24,10 +24,9 @@ script_dir = Path(__file__).parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv(project_root / ".env")
+# Dotenv import removed for CI/CD compatibility
+# from dotenv import load_dotenv
+# load_dotenv(project_root / ".env")
 
 from dodhalueval.data import DatasetBuilder, DatasetValidator, HaluEvalDataset
 from dodhalueval.utils import MetricsCalculator, MetricsReport
