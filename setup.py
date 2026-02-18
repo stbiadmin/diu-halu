@@ -21,7 +21,7 @@ setup(
     description="DoD Hallucination Evaluation Benchmark for Large Language Models",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/dod/dodhalueval",
+    url="https://github.com/stbiadmin/diu-halu",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     classifiers=[

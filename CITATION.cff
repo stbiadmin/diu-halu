@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "DoDHaluEval: Department of Defense Hallucination Evaluation Framework"
+type: software
+version: 0.1.0
+date-released: 2025-07-02
+url: "https://github.com/stbiadmin/diu-halu"
+repository-code: "https://github.com/stbiadmin/diu-halu"
+license: MIT
+abstract: >-
+  A comprehensive, production-ready framework for creating and evaluating
+  hallucination benchmarks specifically designed for Department of Defense
+  knowledge domains. Supports multiple generation methodologies including
+  HaluEval, DoDHaluEval, and hybrid approaches with ensemble detection.
+keywords:
+  - hallucination-detection
+  - llm-evaluation
+  - benchmark
+  - natural-language-processing
+  - department-of-defense
+  - ai-safety
+authors:
+  - family-names: Norman
+    given-names: Justin D
+  - family-names: Rivera
+    given-names: Michael U
+  - family-names: Hughes
+    given-names: D Alex
+references:
+  - type: article
+    title: "Language models should be subject to repeatable, open, domain-contextualized hallucination benchmarking"
+    authors:
+      - family-names: Norman
+        given-names: Justin D
+      - family-names: Rivera
+        given-names: Michael U
+      - family-names: Hughes
+        given-names: D Alex
+    year: 2025
+    url: "https://arxiv.org/abs/2505.17345"
+  - type: conference-paper
+    title: "HaluEval: A Large-Scale Hallucination Evaluation Benchmark for Large Language Models"
+    authors:
+      - family-names: Li
+        given-names: Junyi
+      - family-names: Cheng
+        given-names: Xiaoxue
+      - family-names: Zhao
+        given-names: Wayne Xin
+      - family-names: Nie
+        given-names: Jian-Yun
+      - family-names: Wen
+        given-names: Ji-Rong
+    year: 2023
+    collection-title: "Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing"
+    url: "https://arxiv.org/abs/2305.11747"

@@ -48,7 +48,7 @@ For detailed architectural information, see [Architecture Documentation](docs/ar
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/dodhalueval.git
+git clone https://github.com/stbiadmin/diu-halu.git
 cd dodhalueval
 
 # Create virtual environment
@@ -428,7 +428,7 @@ If you use DoDHaluEval in your research, please cite:
   title={DoDHaluEval: Department of Defense Hallucination Evaluation Framework},
   author={DoDHaluEval Development Team},
   year={2025},
-  url={https://github.com/yourusername/dodhalueval},
+  url={https://github.com/stbiadmin/diu-halu},
   version={2.0.0},
   note={Multi-method hallucination evaluation framework with HaluEval compatibility}
 }
@@ -481,7 +481,7 @@ DoDHaluEval builds upon and extends the following research:
 
 For questions, issues, or contributions:
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/dodhalueval/issues)
+- **Issues**: [GitHub Issues](https://github.com/stbiadmin/diu-halu/issues)
 - **Documentation**: [Project Documentation](docs/)
 - **API Reference**: [API Documentation](docs/api-reference.md)
 
