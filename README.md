@@ -426,7 +426,7 @@ If you use DoDHaluEval in your research, please cite:
 ```bibtex
 @software{dodhalueval2025,
   title={DoDHaluEval: Department of Defense Hallucination Evaluation Framework},
-  author={DoDHaluEval Development Team},
+  author={Norman, Justin D},
   year={2025},
   url={https://github.com/stbiadmin/diu-halu},
   version={2.0.0},

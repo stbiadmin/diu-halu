@@ -16,8 +16,8 @@ def read_requirements(filename):
 setup(
     name="dodhalueval",
     version="0.1.0",
-    author="DoD Research Team",
-    author_email="research@dod.mil",
+    author="Justin D Norman",
+    author_email="",
     description="DoD Hallucination Evaluation Benchmark for Large Language Models",
     long_description=long_description,
     long_description_content_type="text/markdown",

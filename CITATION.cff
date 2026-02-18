@@ -22,10 +22,6 @@ keywords:
 authors:
   - family-names: Norman
     given-names: Justin D
-  - family-names: Rivera
-    given-names: Michael U
-  - family-names: Hughes
-    given-names: D Alex
 references:
   - type: article
     title: "Language models should be subject to repeatable, open, domain-contextualized hallucination benchmarking"
